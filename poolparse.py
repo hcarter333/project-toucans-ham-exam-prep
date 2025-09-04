@@ -24,13 +24,14 @@ import json
 import re
 import sys
 from pathlib import Path
+from collections import Counter
 
 from PyPDF2 import PdfReader
 
 # Header must be at START of the line (ignore any other text)
 # Examples: "E1A01 (D) [97.305, 97.307(b)] Why ... ?"
 HEADER_RE = re.compile(
-    r'^\s*'  # <-- allow leading spaces
+    r'^\s*'  # allow leading spaces
     r'(?P<code>E(?P<subelement>\d)(?P<group_index>[A-Z])(?P<group_number>\d{2}))'
     r'\s*\((?P<answer>[A-D])\)\s*'
     r'(?:\[[^\]]*\]\s*)?'
@@ -73,7 +74,6 @@ def parse_pool(lines, force_class="E"):
             continue
 
         gd = m.groupdict()
-        # Initialize record
         rec = {
             "id": qid,
             "question": "",
@@ -89,21 +89,15 @@ def parse_pool(lines, force_class="E"):
         }
         qid += 1
 
-        # Build question text: start with qstart (may be empty), then add lines
-        # until we encounter a choice, a new header (shouldn't happen within block),
-        # or the guaranteed separator "~~".
+        # Build question text from qstart and subsequent lines until first choice or separator
         q_parts = []
         if gd["qstart"].strip():
             q_parts.append(gd["qstart"].strip())
-
+        # NEW: even if qstart is empty, still scan following lines for question text
         i += 1
         while i < n:
             ln = lines[i]
-            if SEP_RE.match(ln):  # end of this question block
-                break
-            if HEADER_RE.match(ln):  # safety: unexpected header before separator
-                break
-            if CHOICE_RE.match(ln):  # stop question text at first choice
+            if SEP_RE.match(ln) or HEADER_RE.match(ln) or CHOICE_RE.match(ln):
                 break
             if ln.strip():
                 if q_parts:
@@ -161,9 +155,47 @@ def parse_pool(lines, force_class="E"):
         if i < n and SEP_RE.match(lines[i]):
             i += 1
 
-        # Continue scanning for the next header from current i (no extra increment)
+        # Continue scanning for the next header from current i
 
     return items
+
+def print_summary(records):
+    total = len(records)
+    class_counts = Counter(r["class"] for r in records)
+    # subelement counts: E1..E9 etc
+    sub_counts = Counter(f"E{r['subelement']}" for r in records)
+    # group counts: E1A, E1B, ...
+    group_counts = Counter(f"E{r['subelement']}{r['group_index']}" for r in records)
+
+    def sort_sub_key(k):
+        # k is like 'E1', 'E10' -> sort by numeric part
+        return int(k[1:])
+
+    def sort_group_key(k):
+        # k like 'E1A', 'E10C' -> sort by numeric, then letter
+        # split numeric part from after 'E' up to last char
+        num = int(k[1:-1])
+        letter = k[-1]
+        return (num, letter)
+
+    print("\n--- Extraction Summary ---")
+    print(f"Total questions: {total}")
+
+    # By class/element (E)
+    print("\nBy element/class:")
+    for k in sorted(class_counts.keys()):
+        print(f"  {k}: {class_counts[k]}")
+
+    # By subelement E1..E10
+    print("\nBy subelement:")
+    for k in sorted(sub_counts.keys(), key=sort_sub_key):
+        print(f"  {k}: {sub_counts[k]}")
+
+    # By group E1A..E10H
+    print("\nBy group:")
+    for k in sorted(group_counts.keys(), key=sort_group_key):
+        print(f"  {k}: {group_counts[k]}")
+    print("--- End Summary ---\n")
 
 def main():
     ap = argparse.ArgumentParser(description="Parse Extra Class question pool PDF to JSON (PyPDF2).")
@@ -186,6 +218,9 @@ def main():
         print(f"Wrote {len(records)} records to {args.out}")
     else:
         print(data)
+
+    # Print the summary to stdout
+    print_summary(records)
 
 if __name__ == "__main__":
     main()
