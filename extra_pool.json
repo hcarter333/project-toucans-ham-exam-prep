@@ -417,7 +417,7 @@
   },
   {
     "id": 33,
-    "question": "Which of the follo wing operating arrangements allows an FCC -licensed US citizen to operate in many European countries, and amateurs from many European countries to operate in the US ?",
+    "question": "Which of the following operating arrangements allows an FCC -licensed US citizen to operate in many European countries, and amateurs from many European countries to operate in the US ?",
     "class": "E",
     "subelement": "1",
     "group_index": "C",
@@ -495,7 +495,7 @@
   },
   {
     "id": 39,
-    "question": "What must be posted at the loca tion of a station being operated by telecommand on or within 50 kilometers  of the E arth’s surface?",
+    "question": "What must be posted at the location of a station being operated by telecommand on or within 50 kilometers  of the E arth’s surface?",
     "class": "E",
     "subelement": "1",
     "group_index": "D",
@@ -1362,7 +1362,7 @@
     "answer_a": "Jitter",
     "answer_b": "Hang time",
     "answer_c": "Latency",
-    "answer_d": "Anti -VOX"
+    "answer_d": "Anti-VOX"
   },
   {
     "id": 106,
@@ -1437,7 +1437,7 @@
     "group_index": "D",
     "group_number": "06",
     "answer": "A",
-    "answer_a": "Time -synchronous transmissions alternat ing between station s",
+    "answer_a": "Time -synchronous transmissions alternating between station s",
     "answer_b": "Storing and forwarding digital messages",
     "answer_c": "Judging optimum tr ansmission times by monitoring beacons reflected from the moon",
     "answer_d": "High- speed CW identification to avoid fading"
@@ -2224,7 +2224,7 @@
   },
   {
     "id": 172,
-    "question": "How is comp ensation of an oscilloscope probe performed ?",
+    "question": "How is compensation of an oscilloscope probe performed ?",
     "class": "E",
     "subelement": "4",
     "group_index": "A",
@@ -2906,7 +2906,7 @@
     "group_index": "E",
     "group_number": "06",
     "answer": "C",
-    "answer_a": "A loud AC hum in the audio output of your station ’s receiver",
+    "answer_a": "A loud AC hum in the audio output of your station’s receiver",
     "answer_b": "A clicking noise at intervals of a few seconds",
     "answer_c": "The appearance of unstable modulated or unmodulated signals at specific frequencies",
     "answer_d": "A whining- type noi se that continually pulses off and on"
@@ -3446,7 +3446,7 @@
   },
   {
     "id": 266,
-    "question": "When using rectangular coordinates to graph the impedance of a circuit, what d o the axes represent?",
+    "question": "When using rectangular coordinates to graph the impedance of a circuit, what do the axes represent?",
     "class": "E",
     "subelement": "5",
     "group_index": "C",
@@ -4128,7 +4128,7 @@
     "group_index": "D",
     "group_number": "03",
     "answer": "A",
-    "answer_a": "Mechanical deformation of mate rial due to the application of a voltage",
+    "answer_a": "Mechanical deformation of material due to the application of a voltage",
     "answer_b": "Mechanical deformation of material due to the application of a magnetic field",
     "answer_c": "Generation of electrical energy in the presence of light",
     "answer_d": "Increased conductivity in the presence of light"
@@ -4520,7 +4520,7 @@
     "answer": "D",
     "answer_a": "The output RF power divided by the input DC power",
     "answer_b": "The output in lumens divided by the input power in watts",
-    "answer_c": "The open -circuit voltage divided by the short -circuit current under full illumination",
+    "answer_c": "The open-circuit voltage divided by the short -circuit current under full illumination",
     "answer_d": "The relative fraction of lig ht that is converted to current"
   },
   {
@@ -4538,7 +4538,7 @@
   },
   {
     "id": 350,
-    "question": "What is the approximate open -circuit voltage produced by a fully illuminated silicon photovoltaic cell?",
+    "question": "What is the approximate open-circuit voltage produced by a fully illuminated silicon photovoltaic cell?",
     "class": "E",
     "subelement": "6",
     "group_index": "F",
@@ -4963,7 +4963,7 @@
     "answer_a": "A power supply filter made with interlaced quartz crystals",
     "answer_b": "An audio filter made with four quartz crystals that resonate at 1 kHz intervals",
     "answer_c": "A filter using lattice -shaped quartz crystals for high -Q performance",
-    "answer_d": "A filter for low -level signals made using quart z crystals"
+    "answer_d": "A filter for low -level signals made using quartz crystals"
   },
   {
     "id": 383,
@@ -5002,7 +5002,7 @@
     "answer_a": "It has a ramp voltage as its output",
     "answer_b": "It eliminates the need for a pass transistor",
     "answer_c": "The control element duty cycle is proportional to the line or load conditions",
-    "answer_d": "The conduction of a control element is varied to m aintain a constant output voltage"
+    "answer_d": "The conduction of a control element is varied to maintain a constant output voltage"
   },
   {
     "id": 386,
@@ -5012,7 +5012,7 @@
     "group_index": "D",
     "group_number": "02",
     "answer": "B",
-    "answer_a": "By alternat ing the output between positive and negative voltages",
+    "answer_a": "By alternating the output between positive and negative voltages",
     "answer_b": "By varying the duty cycle of pulses input to a filter",
     "answer_c": "By varying the conductivity of a p ass element",
     "answer_d": "By switching between two Zener diode reference voltages"
@@ -5253,7 +5253,7 @@
   },
   {
     "id": 405,
-    "question": "Why is de -emphasis used in FM communicati ons receivers?",
+    "question": "Why is de-emphasis used in FM communications receivers?",
     "class": "E",
     "subelement": "7",
     "group_index": "E",
@@ -5435,7 +5435,7 @@
   },
   {
     "id": 419,
-    "question": "Why is an anti -aliasing filter require d in a decimator?",
+    "question": "Why is an anti-aliasing filter require d in a decimator?",
     "class": "E",
     "subelement": "7",
     "group_index": "F",
@@ -5585,7 +5585,7 @@
     "group_number": "06",
     "answer": "B",
     "answer_a": "The maximum frequency for a filter circuit using that type of amplifier",
-    "answer_b": "The frequency at which the open -loop ga in of the amplifier equals one",
+    "answer_b": "The frequency at which the open-loop ga in of the amplifier equals one",
     "answer_c": "The gain of the amplifier at a filter’s cutoff frequency",
     "answer_d": "The frequency at which the amplifier’s offset voltage is zero"
   },
@@ -5600,7 +5600,7 @@
     "answer_a": "0.21",
     "answer_b": "4700",
     "answer_c": "47",
-    "answer_d": "24 ~~"
+    "answer_d": "24"
   },
   {
     "id": 432,
@@ -5743,7 +5743,7 @@
     "answer_a": "Wide -band AF and RF power amplification",
     "answer_b": "Frequency synthesis and FM demodulation",
     "answer_c": "Photovoltaic conversion and optical coupling",
-    "answer_d": "Comparison of two digital input signals and digital pulse count ing"
+    "answer_d": "Comparison of two digital input signals and digital pulse counting"
   },
   {
     "id": 443,
@@ -5773,7 +5773,7 @@
   },
   {
     "id": 445,
-    "question": "What type of frequency synthesizer circuit uses a phase accumulator, lookup table, digital- to-analog converter, and a low -pass anti -alias filter?",
+    "question": "What type of frequency synthesizer circuit uses a phase accumulator, lookup table, digital- to-analog converter, and a low -pass anti-alias filter?",
     "class": "E",
     "subelement": "7",
     "group_index": "H",
@@ -6159,7 +6159,7 @@
     "answer_a": "To minimize bandwidth",
     "answer_b": "To simplify modulation",
     "answer_c": "To improve carrier suppression",
-    "answer_d": "All these ch oices are correct"
+    "answer_d": "All these choices are correct"
   },
   {
     "id": 475,
@@ -6442,7 +6442,7 @@
     "group_index": "D",
     "group_number": "10",
     "answer": "B",
-    "answer_a": "Baudot uses 4 data bits per character, A SCII uses 7 or 8; Baudot uses 1 character as a letters/figures shift code, ASCII has no letters/figures code",
+    "answer_a": "Baudot uses 4 data bits per character, ASCII uses 7 or 8; Baudot uses 1 character as a letters/figures shift code, ASCII has no letters/figures code",
     "answer_b": "Baudot uses 5 data bits per character, ASCII uses 7 or 8; Baudot uses 2 characters as letters/figures shift codes, ASCII has no letters/figures shift code",
     "answer_c": "Baudot uses 6 data bits per character, ASCII uses 7 or 8; Baudot has no letters/figures shift code, ASCII uses 2 letters/figures shift codes",
     "answer_d": "Baudot uses 7 data bits per character, ASCII uses 8; Baudot has no letters/figures shift code, ASC II uses 2 letters/figures shift codes"
@@ -6718,7 +6718,7 @@
     "answer_a": "The region of the ionosphere where radiated power is not refracted",
     "answer_b": "The region where radiated power dissipates over a specified time period",
     "answer_c": "The region where radiated field strengths are constant",
-    "answer_d": "The region where the shape of the radiation pattern no long er varies with distance"
+    "answer_d": "The region where the shape of the radiation pattern no longer varies with distance"
   },
   {
     "id": 518,
@@ -6871,7 +6871,7 @@
     "group_index": "C",
     "group_number": "09",
     "answer": "A",
-    "answer_a": "A wire antenna center -fed through a specific length of open -wire line connected to a balun and coaxial feed line",
+    "answer_a": "A wire antenna center -fed through a specific length of open-wire line connected to a balun and coaxial feed line",
     "answer_b": "A multi -band trap antenna",
     "answer_c": "A phased array antenna consisting of multiple loops",
     "answer_d": "A w ide band dipole using shorted coaxial cable for the radiating elements and fed with a 4:1 balun"
