@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Extra Class Practice Exam (Stacked Bars)</title>
+  <title>Extra Class Practice Exam (Stacked Bars with Toggle Groups)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Chart.js CDN -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
@@ -23,14 +23,22 @@
     .correct { color:#0a7b34; }
     .incorrect { color:#b00020; }
     #summary { margin-top:2rem; padding:1rem; border:2px dashed #ddd; border-radius:12px; background:#fafafa; }
+
     #charts { margin-top:2rem; }
     .section-title { margin-top:2rem; margin-bottom:.5rem; }
     .charts-note { color:#555; font-size:.9rem; margin-bottom:.5rem; }
 
-    /* Chart cards + 10-across layout */
-    .grid10 { display:grid; grid-template-columns: repeat(10, minmax(80px, 1fr)); gap: 8px; }
+    /* 10-across grids for compact chart tiles */
+    .grid10 { display:grid; grid-template-columns: repeat(10, minmax(80px, 1fr)); gap: 8px; align-items:start; }
+
     .chart-card { border:1px solid #eee; border-radius:12px; padding:8px; }
-    .chart-title { font-weight:600; font-size:.9rem; margin:0 0 6px 0; }
+    .chart-title-row { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:6px; }
+    .chart-title { font-weight:600; font-size:.9rem; margin:0; }
+    .caret-btn { cursor:pointer; border:1px solid #ddd; background:#fafafa; border-radius:6px; padding:2px 6px; line-height:1; }
+    .caret-btn[hidden] { display:none; }
+
+    /* Group details row (appears one row below subelement grid) */
+    #groupDetails { margin-top: 10px; }
     .sub-section { margin-top: 12px; }
   </style>
 </head>
@@ -47,15 +55,15 @@
   <div id="charts">
     <h2 class="section-title">Performance Dashboard</h2>
     <div class="charts-note">Cumulative charts and score history (persisted via <code>#c=...</code> in the URL).</div>
+
     <div class="chart-card" style="margin-bottom:12px;">
       <canvas id="scoresOverTime" height="140"></canvas>
     </div>
 
     <h3 class="section-title">Correct vs Wrong by Subelement</h3>
     <div id="subelementGrid" class="grid10"></div>
-
-    <h3 class="section-title">Correct vs Wrong by Group (within each Subelement)</h3>
-    <div id="groupGrid"></div>
+    <!-- Group charts appear one row below subelements -->
+    <div id="groupDetails"></div>
   </div>
 
   <div id="exam"></div>
@@ -70,6 +78,7 @@
   </div>
 
   <script>
+    
     // ---------- Helpers ----------
     function groupKey(q) { return `E${q.subelement}${q.group_index}`; }
     function subKey(q)   { return `E${q.subelement}`; }
@@ -98,13 +107,24 @@
 
     // ---------- Charts ----------
     let scoresChart = null;
-    const smallCharts = []; // keep references to destroy/redraw
+    const subelementCharts = []; // small stacked bars for subelements
+    const groupCharts = [];      // small stacked bars for groups (current expanded)
+    let currentExpandedSub = null; // e.g. 'E1'
+
+    function destroyCharts(arr) {
+      while (arr.length) {
+        const ch = arr.pop();
+        try { ch.destroy(); } catch {}
+      }
+    }
 
     function clearCharts() {
-      if (scoresChart) { scoresChart.destroy(); scoresChart = null; }
-      smallCharts.splice(0).forEach(ch => ch.destroy());
+      if (scoresChart) { try { scoresChart.destroy(); } catch {} scoresChart = null; }
+      destroyCharts(subelementCharts);
+      destroyCharts(groupCharts);
       document.getElementById('subelementGrid').innerHTML = '';
-      document.getElementById('groupGrid').innerHTML = '';
+      document.getElementById('groupDetails').innerHTML = '';
+      currentExpandedSub = null;
     }
 
     function renderScoresOverTime(history) {
@@ -119,19 +139,8 @@
     }
 
     // Small stacked bar: green (correct) bottom, red (wrong) top
-    function addStackedBar(parent, title, correct, wrong) {
-      const wrap = document.createElement('div');
-      wrap.className = 'chart-card';
-      const h = document.createElement('div');
-      h.className = 'chart-title';
-      h.textContent = `${title}`;
-      const canvas = document.createElement('canvas');
-      canvas.height = 110; // compact
-      wrap.appendChild(h);
-      wrap.appendChild(canvas);
-      parent.appendChild(wrap);
-
-      const chart = new Chart(canvas.getContext('2d'), {
+    function createStackedBar(canvas, correct, wrong) {
+      return new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
           labels: [''],
@@ -146,11 +155,7 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
-                footer: (items) => {
-                  // Show totals in tooltip footer
-                  const total = correct + wrong;
-                  return `Total: ${total}`;
-                }
+                footer: () => `Total: ${correct + wrong}`
               }
             }
           },
@@ -160,49 +165,120 @@
           }
         }
       });
-      smallCharts.push(chart);
     }
 
-    function renderSubelementStacks(subStats) {
+    function renderSubelementStacks(subStats, groupsStats) {
       const grid = document.getElementById('subelementGrid');
-      const keys = Object.keys(subStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
-      keys.forEach(k => {
-        const {correct=0, wrong=0} = subStats[k] || {};
-        addStackedBar(grid, k, correct, wrong);
-      });
-    }
+      grid.innerHTML = '';
+      destroyCharts(subelementCharts);
 
-    function renderGroupStacks(groupStats) {
-      const container = document.getElementById('groupGrid');
-      container.innerHTML = '';
-      const subs = Object.keys(groupStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
-
+      const subs = Object.keys(subStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
       subs.forEach(sub => {
-        const section = document.createElement('section');
-        section.className = 'sub-section';
-        const h = document.createElement('h4');
-        h.textContent = `Groups in ${sub}`;
-        section.appendChild(h);
+        const {correct=0, wrong=0} = subStats[sub] || {};
+        const card = document.createElement('div');
+        card.className = 'chart-card';
 
-        const grid = document.createElement('div');
-        grid.className = 'grid10';
+        const row = document.createElement('div');
+        row.className = 'chart-title-row';
 
-        const groups = Object.keys(groupStats[sub]).sort();
-        groups.forEach(g => {
-          const {correct=0, wrong=0} = groupStats[sub][g] || {};
-          addStackedBar(grid, g, correct, wrong);
+        const title = document.createElement('div');
+        title.className = 'chart-title';
+        title.textContent = `${sub}`;
+
+        const caret = document.createElement('button');
+        caret.className = 'caret-btn';
+        caret.textContent = (currentExpandedSub === sub) ? '▲' : '▼';
+
+        // Only show caret if we have any groups recorded for this subelement
+        const hasGroups = !!(groupsStats && groupsStats[sub] && Object.keys(groupsStats[sub]).length);
+        if (!hasGroups) caret.hidden = true;
+
+        caret.addEventListener('click', () => {
+          if (currentExpandedSub === sub) {
+            // collapse
+            currentExpandedSub = null;
+            caret.textContent = '▼';
+            document.getElementById('groupDetails').innerHTML = '';
+            destroyCharts(groupCharts);
+            // reset other carets to ▼
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.textContent = '▼'; });
+          } else {
+            // expand this sub, collapse any previous
+            currentExpandedSub = sub;
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.textContent = '▼'; });
+            caret.textContent = '▲';
+            renderGroupStacksForSub(sub);
+          }
         });
 
-        section.appendChild(grid);
-        container.appendChild(section);
+        row.appendChild(title);
+        row.appendChild(caret);
+        card.appendChild(row);
+
+        const canvas = document.createElement('canvas');
+        canvas.height = 110;
+        card.appendChild(canvas);
+        grid.appendChild(card);
+
+        const chart = createStackedBar(canvas, correct, wrong);
+        subelementCharts.push(chart);
       });
+    }
+
+    function renderGroupStacksForSub(sub) {
+      // Clear previous group charts
+      const holder = document.getElementById('groupDetails');
+      holder.innerHTML = '';
+      destroyCharts(groupCharts);
+
+      // Build section for this sub
+      const section = document.createElement('section');
+      section.className = 'sub-section';
+
+      const h = document.createElement('h4');
+      h.textContent = `Groups in ${sub}`;
+      section.appendChild(h);
+
+      const grid = document.createElement('div');
+      grid.className = 'grid10';
+
+      const groupsObj = state.stats.groups[sub] || {};
+      const groups = Object.keys(groupsObj).sort();
+
+      groups.forEach(g => {
+        const {correct=0, wrong=0} = groupsObj[g] || {};
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+
+        const row = document.createElement('div');
+        row.className = 'chart-title-row';
+
+        const title = document.createElement('div');
+        title.className = 'chart-title';
+        title.textContent = `${sub}${g}`;
+
+        row.appendChild(title);
+        // no caret in group tiles
+        card.appendChild(row);
+
+        const canvas = document.createElement('canvas');
+        canvas.height = 110;
+        card.appendChild(canvas);
+        grid.appendChild(card);
+
+        const chart = createStackedBar(canvas, correct, wrong);
+        groupCharts.push(chart);
+      });
+
+      section.appendChild(grid);
+      holder.appendChild(section);
     }
 
     function renderAllCharts(stats) {
       clearCharts();
       renderScoresOverTime(stats.history || []);
-      renderSubelementStacks(stats.subelements || {});
-      renderGroupStacks(stats.groups || {});
+      renderSubelementStacks(stats.subelements || {}, stats.groups || {});
+      // group charts are lazy; nothing rendered here until a caret is clicked
     }
 
     // ---------- App state ----------
@@ -438,7 +514,7 @@
       if (state.all.length) startNewExam(state.all); // build next exam without reload
     });
 
-    // On first load: if hash has #c=..., restore and render charts
+    // On first load: restore from #c= if present
     restoreStatsFromHash();
   </script>
 </body>
