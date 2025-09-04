@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Extra Class Practice Exam</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body { margin: 2rem; }
+    h1 { margin-top: 0; }
+    .toolbar { display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;}
+    .btn { cursor:pointer; padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem; background:#f7f7f7; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .card { border:1px solid #e5e5e5; border-radius:12px; padding:1rem; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+    .qid { font-weight:600; color:#555; margin-bottom:.25rem; }
+    .qtext { margin:.25rem 0 .75rem; line-height:1.5; }
+    .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    select { padding:.4rem .5rem; }
+    .result { margin-top:.5rem; font-weight:600; }
+    .correct { color: #0a7b34; }
+    .incorrect { color: #b00020; }
+    #summary { margin-top:2rem; padding:1rem; border:2px dashed #ddd; border-radius:12px; background:#fafafa; }
+    .muted { color:#777; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Extra Class Practice Exam</h1>
+
+  <div class="toolbar">
+    <button id="loadBtn" class="btn">Load questions (extra_pool.json)</button>
+    <span class="muted">or choose a JSON file:</span>
+    <input id="fileInput" type="file" accept="application/json" />
+    <button id="newExamBtn" class="btn" disabled>New exam</button>
+  </div>
+
+  <div id="exam"></div>
+  <div id="summary" hidden>
+    <h2>Your Score</h2>
+    <p id="scoreLine"></p>
+    <details>
+      <summary>What was tracked?</summary>
+      <pre id="tracking" style="white-space:pre-wrap;"></pre>
+    </details>
+  </div>
+
+  <script>
+    // ----- Utility helpers -----
+    function groupKey(q) { return `E${q.subelement}${q.group_index}`; }
+    function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function letterToField(letter) {
+      const map = { A: "answer_a", B: "answer_b", C: "answer_c", D: "answer_d" };
+      return map[letter] || null;
+    }
+    function sanitize(text) {
+      return (text ?? "").toString().replace(/\s+/g, " ").trim();
+    }
+
+    // ----- App state -----
+    const state = {
+      all: [],           // all questions from JSON
+      selected: [],      // one random per unique subelement+group
+      answered: new Map(), // id -> { selected: 'A'|'B'|'C'|'D', correct: bool }
+      presentedIds: [],  // array of ids for the test
+      correctIds: new Set(),
+      wrongIds: new Set(),
+      done: false
+    };
+
+    // ----- Loaders -----
+    async function loadFromFetch() {
+      const res = await fetch('extra_pool.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Failed to fetch extra_pool.json (${res.status})`);
+      return res.json();
+    }
+    function loadFromFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = () => {
+          try { resolve(JSON.parse(reader.result)); }
+          catch (e) { reject(e); }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    // ----- Exam building -----
+    function buildExam(questions) {
+      // Group by unique subelement+group_index (e.g., E1A, E1B, …)
+      const buckets = new Map();
+      for (const q of questions) {
+        const key = groupKey(q);
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(q);
+      }
+      // Pick one random question from each bucket
+      const chosen = [];
+      for (const [key, arr] of buckets.entries()) {
+        chosen.push(pickRandom(arr));
+      }
+      // Order by numeric subelement then alpha group for a tidy display
+      chosen.sort((a,b) => {
+        const an = parseInt(a.subelement, 10), bn = parseInt(b.subelement, 10);
+        if (an !== bn) return an - bn;
+        return a.group_index.localeCompare(b.group_index);
+      });
+      return chosen;
+    }
+
+    function renderExam() {
+      const container = document.getElementById('exam');
+      container.innerHTML = ""; // clear
+      state.answered.clear();
+      state.correctIds.clear();
+      state.wrongIds.clear();
+      state.done = false;
+
+      state.presentedIds = state.selected.map(q => q.id);
+
+      for (const q of state.selected) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const header = document.createElement('div');
+        header.className = 'qid';
+        header.textContent = `E${q.subelement}${q.group_index}${q.group_number} (id ${q.id})`;
+        card.appendChild(header);
+
+        const qtext = document.createElement('div');
+        qtext.className = 'qtext';
+        qtext.textContent = sanitize(q.question);
+        card.appendChild(qtext);
+
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+
+        const select = document.createElement('select');
+        select.innerHTML = `<option value="">-- choose an answer --</option>`;
+        // Build choices A-D (include letter prefix in the label)
+        ['A','B','C','D'].forEach(letter => {
+          const txt = sanitize(q[letter.toLowerCase() === 'a' ? 'answer_a'
+                        : letter.toLowerCase() === 'b' ? 'answer_b'
+                        : letter.toLowerCase() === 'c' ? 'answer_c' : 'answer_d']);
+          if (!txt) return; // skip empty/malformed choices just in case
+          const opt = document.createElement('option');
+          opt.value = letter;
+          opt.textContent = `${letter}. ${txt}`;
+          select.appendChild(opt);
+        });
+
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = 'Submit answer';
+
+        const result = document.createElement('div');
+        result.className = 'result';
+
+        btn.addEventListener('click', () => {
+          if (!select.value) {
+            alert('Please choose an answer first.');
+            return;
+          }
+          // prevent multiple grading
+          if (select.disabled) return;
+
+          const chosenLetter = select.value;
+          const correctLetter = (q.answer || '').trim().toUpperCase();
+          const isCorrect = chosenLetter === correctLetter;
+
+          state.answered.set(q.id, { selected: chosenLetter, correct: isCorrect });
+
+          const correctField = letterToField(correctLetter);
+          const correctText = sanitize(correctField ? q[correctField] : "");
+          if (isCorrect) {
+            result.textContent = 'Correct answer';
+            result.classList.remove('incorrect');
+            result.classList.add('correct');
+            state.correctIds.add(q.id);
+          } else {
+            result.textContent = `Incorrect. The correct answer was: ${correctText || correctLetter}`;
+            result.classList.remove('correct');
+            result.classList.add('incorrect');
+            state.wrongIds.add(q.id);
+          }
+
+          // lock this question’s controls
+          select.disabled = true;
+          btn.disabled = true;
+
+          // If all questions answered, show score
+          if (state.answered.size === state.selected.length && !state.done) {
+            state.done = true;
+            showSummary();
+          }
+        });
+
+        controls.appendChild(select);
+        controls.appendChild(btn);
+        card.appendChild(controls);
+        card.appendChild(result);
+        container.appendChild(card);
+      }
+    }
+
+    function showSummary() {
+      const total = state.selected.length;
+      const correct = state.correctIds.size;
+      const pct = Math.round((correct / total) * 100);
+      const pass = pct >= 80;
+
+      const summary = document.getElementById('summary');
+      const scoreLine = document.getElementById('scoreLine');
+      scoreLine.textContent = pass
+        ? `You passed with ${pct}% (${correct}/${total} correct).`
+        : `You failed with ${pct}% (${correct}/${total} correct).`;
+
+      const tracking = {
+        presented_question_ids: state.presentedIds,
+        correct_question_ids: Array.from(state.correctIds),
+        wrong_question_ids: Array.from(state.wrongIds)
+      };
+      document.getElementById('tracking').textContent = JSON.stringify(tracking, null, 2);
+      summary.hidden = false;
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    // ----- Wire up UI -----
+    document.getElementById('loadBtn').addEventListener('click', async () => {
+      try {
+        state.all = await loadFromFetch();
+        state.selected = buildExam(state.all);
+        renderExam();
+        document.getElementById('newExamBtn').disabled = false;
+      } catch (e) {
+        alert(`Could not load extra_pool.json: ${e.message}`);
+      }
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      try {
+        state.all = await loadFromFile(file);
+        state.selected = buildExam(state.all);
+        renderExam();
+        document.getElementById('newExamBtn').disabled = false;
+      } catch (e) {
+        alert(`Could not read JSON file: ${e.message}`);
+      }
+    });
+
+    document.getElementById('newExamBtn').addEventListener('click', () => {
+      if (!state.all.length) {
+        alert('Load questions first.');
+        return;
+      }
+      state.selected = buildExam(state.all);
+      document.getElementById('summary').hidden = true;
+      renderExam();
+    });
+  </script>
+</body>
+</html>
