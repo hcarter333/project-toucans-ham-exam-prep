@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Extra Class Practice Exam</title>
+  <title>Extra Class Practice Exam (with Charts)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
     body { margin: 2rem; }
@@ -11,16 +13,22 @@
     .toolbar { display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;}
     .btn { cursor:pointer; padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem; background:#f7f7f7; }
     .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .muted { color:#777; font-size:.9rem; }
     .card { border:1px solid #e5e5e5; border-radius:12px; padding:1rem; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,.05); }
     .qid { font-weight:600; color:#555; margin-bottom:.25rem; }
     .qtext { margin:.25rem 0 .75rem; line-height:1.5; }
     .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
     select { padding:.4rem .5rem; }
     .result { margin-top:.5rem; font-weight:600; }
-    .correct { color: #0a7b34; }
-    .incorrect { color: #b00020; }
+    .correct { color:#0a7b34; }
+    .incorrect { color:#b00020; }
     #summary { margin-top:2rem; padding:1rem; border:2px dashed #ddd; border-radius:12px; background:#fafafa; }
-    .muted { color:#777; font-size:.9rem; }
+    #charts { margin-top:2rem; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .chart-card { border:1px solid #eee; border-radius:12px; padding:12px; }
+    .section-title { margin-top:2rem; margin-bottom:.5rem; }
+    details > summary { cursor: pointer; }
+    .charts-note { color:#555; font-size:.9rem; margin-bottom:.5rem; }
   </style>
 </head>
 <body>
@@ -33,40 +41,162 @@
     <button id="newExamBtn" class="btn" disabled>New exam</button>
   </div>
 
+  <div id="charts">
+    <h2 class="section-title">Performance Dashboard</h2>
+    <div class="charts-note">If you’ve taken tests before (or arrived with a <code>#c=...</code> URL), your cumulative charts and score history appear here.</div>
+    <div class="chart-card">
+      <canvas id="scoresOverTime" height="140"></canvas>
+    </div>
+
+    <h3 class="section-title">Correct vs Wrong by Subelement</h3>
+    <div id="subelementGrid" class="grid"></div>
+
+    <h3 class="section-title">Correct vs Wrong by Group (within each Subelement)</h3>
+    <div id="groupGrid"></div>
+  </div>
+
   <div id="exam"></div>
+
   <div id="summary" hidden>
     <h2>Your Score</h2>
     <p id="scoreLine"></p>
     <details>
-      <summary>What was tracked?</summary>
+      <summary>What was tracked? (this test)</summary>
       <pre id="tracking" style="white-space:pre-wrap;"></pre>
     </details>
   </div>
 
   <script>
-    // ----- Utility helpers -----
+    // ---------- Helpers ----------
     function groupKey(q) { return `E${q.subelement}${q.group_index}`; }
+    function subKey(q)   { return `E${q.subelement}`; }
     function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
     function letterToField(letter) {
       const map = { A: "answer_a", B: "answer_b", C: "answer_c", D: "answer_d" };
       return map[letter] || null;
     }
-    function sanitize(text) {
-      return (text ?? "").toString().replace(/\s+/g, " ").trim();
+    function sanitize(text) { return (text ?? "").toString().replace(/\s+/g, " ").trim(); }
+    const nowIso = () => new Date().toISOString();
+
+    // Base64URL encode/decode JSON for hash
+    function encodeState(obj) {
+      const json = JSON.stringify(obj);
+      const b64 = btoa(unescape(encodeURIComponent(json)));
+      return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    function decodeState(s) {
+      try {
+        const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
+        const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+        const json = decodeURIComponent(escape(atob(b64 + pad)));
+        return JSON.parse(json);
+      } catch { return null; }
     }
 
-    // ----- App state -----
+    // ---------- Charts ----------
+    let scoresChart = null;
+    const pieCharts = []; // keep references to destroy/redraw
+
+    function clearCharts() {
+      if (scoresChart) { scoresChart.destroy(); scoresChart = null; }
+      pieCharts.splice(0).forEach(ch => ch.destroy());
+      document.getElementById('subelementGrid').innerHTML = '';
+      document.getElementById('groupGrid').innerHTML = '';
+    }
+
+    function renderScoresOverTime(history) {
+      const ctx = document.getElementById('scoresOverTime').getContext('2d');
+      const labels = history.map(h => new Date(h.ts).toLocaleString());
+      const data   = history.map(h => h.scorePct);
+      scoresChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Test Score (%)', data }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+    }
+
+    function addPie(parent, title, correct, wrong) {
+      const wrap = document.createElement('div');
+      wrap.className = 'chart-card';
+      const h = document.createElement('div');
+      h.textContent = `${title} (correct ${correct}, wrong ${wrong})`;
+      h.style.fontWeight = '600';
+      h.style.marginBottom = '8px';
+      const canvas = document.createElement('canvas');
+      canvas.height = 140;
+      wrap.appendChild(h);
+      wrap.appendChild(canvas);
+      parent.appendChild(wrap);
+
+      const chart = new Chart(canvas.getContext('2d'), {
+        type: 'pie',
+        data: {
+          labels: ['Correct', 'Wrong'],
+          datasets: [{ data: [correct, wrong] }]
+        },
+        options: { responsive: true }
+      });
+      pieCharts.push(chart);
+    }
+
+    function renderSubelementPies(subStats) {
+      const grid = document.getElementById('subelementGrid');
+      const keys = Object.keys(subStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+      keys.forEach(k => {
+        const {correct=0, wrong=0} = subStats[k] || {};
+        addPie(grid, k, correct, wrong);
+      });
+    }
+
+    function renderGroupPies(groupStats) {
+      const container = document.getElementById('groupGrid');
+      container.innerHTML = '';
+      const subs = Object.keys(groupStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+      subs.forEach(sub => {
+        const section = document.createElement('section');
+        const h = document.createElement('h4');
+        h.textContent = `Groups in ${sub}`;
+        section.appendChild(h);
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        const groups = Object.keys(groupStats[sub]).sort();
+        groups.forEach(g => {
+          const {correct=0, wrong=0} = groupStats[sub][g] || {};
+          addPie(grid, g, correct, wrong);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+      });
+    }
+
+    function renderAllCharts(stats) {
+      clearCharts();
+      renderScoresOverTime(stats.history || []);
+      renderSubelementPies(stats.subelements || {});
+      renderGroupPies(stats.groups || {});
+    }
+
+    // ---------- App state ----------
     const state = {
-      all: [],           // all questions from JSON
-      selected: [],      // one random per unique subelement+group
-      answered: new Map(), // id -> { selected: 'A'|'B'|'C'|'D', correct: bool }
-      presentedIds: [],  // array of ids for the test
+      all: [],            // all questions
+      selected: [],       // one random question per unique E{n}{group_index}
+      answered: new Map(),// id -> { selected, correct }
+      presentedIds: [],
       correctIds: new Set(),
       wrongIds: new Set(),
-      done: false
+      done: false,
+      // cumulative stats persisted via #c=
+      stats: {
+        history: [],                   // [{ts, scorePct}]
+        subelements: {},               // { E1:{correct,wrong}, ... }
+        groups: {}                     // { E1:{ A:{correct,wrong}, ... }, E2:{...} }
+      }
     };
 
-    // ----- Loaders -----
+    // ---------- Loaders ----------
     async function loadFromFetch() {
       const res = await fetch('extra_pool.json', { cache: 'no-store' });
       if (!res.ok) throw new Error(`Failed to fetch extra_pool.json (${res.status})`);
@@ -77,30 +207,24 @@
         const reader = new FileReader();
         reader.onerror = () => reject(reader.error);
         reader.onload = () => {
-          try { resolve(JSON.parse(reader.result)); }
-          catch (e) { reject(e); }
+          try { resolve(JSON.parse(reader.result)); } catch (e) { reject(e); }
         };
         reader.readAsText(file);
       });
     }
 
-    // ----- Exam building -----
+    // ---------- Exam logic ----------
     function buildExam(questions) {
-      // Group by unique subelement+group_index (e.g., E1A, E1B, …)
       const buckets = new Map();
       for (const q of questions) {
         const key = groupKey(q);
         if (!buckets.has(key)) buckets.set(key, []);
         buckets.get(key).push(q);
       }
-      // Pick one random question from each bucket
       const chosen = [];
-      for (const [key, arr] of buckets.entries()) {
-        chosen.push(pickRandom(arr));
-      }
-      // Order by numeric subelement then alpha group for a tidy display
+      for (const [, arr] of buckets.entries()) chosen.push(pickRandom(arr));
       chosen.sort((a,b) => {
-        const an = parseInt(a.subelement, 10), bn = parseInt(b.subelement, 10);
+        const an = parseInt(a.subelement,10), bn = parseInt(b.subelement,10);
         if (an !== bn) return an - bn;
         return a.group_index.localeCompare(b.group_index);
       });
@@ -109,12 +233,11 @@
 
     function renderExam() {
       const container = document.getElementById('exam');
-      container.innerHTML = ""; // clear
+      container.innerHTML = ""; // clear test
       state.answered.clear();
       state.correctIds.clear();
       state.wrongIds.clear();
       state.done = false;
-
       state.presentedIds = state.selected.map(q => q.id);
 
       for (const q of state.selected) {
@@ -136,12 +259,10 @@
 
         const select = document.createElement('select');
         select.innerHTML = `<option value="">-- choose an answer --</option>`;
-        // Build choices A-D (include letter prefix in the label)
         ['A','B','C','D'].forEach(letter => {
-          const txt = sanitize(q[letter.toLowerCase() === 'a' ? 'answer_a'
-                        : letter.toLowerCase() === 'b' ? 'answer_b'
-                        : letter.toLowerCase() === 'c' ? 'answer_c' : 'answer_d']);
-          if (!txt) return; // skip empty/malformed choices just in case
+          const field = letterToField(letter);
+          const txt = sanitize(q[field]);
+          if (!txt) return;
           const opt = document.createElement('option');
           opt.value = letter;
           opt.textContent = `${letter}. ${txt}`;
@@ -156,12 +277,8 @@
         result.className = 'result';
 
         btn.addEventListener('click', () => {
-          if (!select.value) {
-            alert('Please choose an answer first.');
-            return;
-          }
-          // prevent multiple grading
-          if (select.disabled) return;
+          if (!select.value) { alert('Please choose an answer first.'); return; }
+          if (select.disabled) return; // already graded
 
           const chosenLetter = select.value;
           const correctLetter = (q.answer || '').trim().toUpperCase();
@@ -183,14 +300,12 @@
             state.wrongIds.add(q.id);
           }
 
-          // lock this question’s controls
           select.disabled = true;
           btn.disabled = true;
 
-          // If all questions answered, show score
           if (state.answered.size === state.selected.length && !state.done) {
             state.done = true;
-            showSummary();
+            finalizeTestAndRender();
           }
         });
 
@@ -202,12 +317,13 @@
       }
     }
 
-    function showSummary() {
+    function finalizeTestAndRender() {
       const total = state.selected.length;
       const correct = state.correctIds.size;
       const pct = Math.round((correct / total) * 100);
       const pass = pct >= 80;
 
+      // Summary text
       const summary = document.getElementById('summary');
       const scoreLine = document.getElementById('scoreLine');
       scoreLine.textContent = pass
@@ -221,15 +337,72 @@
       };
       document.getElementById('tracking').textContent = JSON.stringify(tracking, null, 2);
       summary.hidden = false;
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+      // Update cumulative stats (per subelement & per group)
+      accumulateStatsFromCurrentTest();
+
+      // Append score history
+      state.stats.history.push({ ts: nowIso(), scorePct: pct });
+
+      // Draw charts
+      renderAllCharts(state.stats);
+
+      // Enable new-exam button
+      document.getElementById('newExamBtn').disabled = false;
+
+      // Scroll to charts
+      window.scrollTo({ top: document.getElementById('charts').offsetTop, behavior: 'smooth' });
     }
 
-    // ----- Wire up UI -----
+    function accumulateStatsFromCurrentTest() {
+      for (const q of state.selected) {
+        const keySub = `E${q.subelement}`;
+        const keyGrp = q.group_index;
+        const wasCorrect = state.correctIds.has(q.id);
+
+        // subelement bucket
+        if (!state.stats.subelements[keySub]) state.stats.subelements[keySub] = { correct:0, wrong:0 };
+        state.stats.subelements[keySub][wasCorrect ? 'correct':'wrong']++;
+
+        // group bucket inside subelement
+        if (!state.stats.groups[keySub]) state.stats.groups[keySub] = {};
+        if (!state.stats.groups[keySub][keyGrp]) state.stats.groups[keySub][keyGrp] = { correct:0, wrong:0 };
+        state.stats.groups[keySub][keyGrp][wasCorrect ? 'correct':'wrong']++;
+      }
+    }
+
+    function startNewExam(questions) {
+      state.selected = buildExam(questions);
+      document.getElementById('summary').hidden = true;
+      renderExam();
+    }
+
+    // ---------- Hash state (persist across runs) ----------
+    function updateHashWithStats() {
+      const encoded = encodeState(state.stats);
+      const url = location.origin + location.pathname + '#c=' + encoded;
+      location.assign(url); // navigate to URL with hash (keeps page, updates hash)
+    }
+
+    function restoreStatsFromHash() {
+      const m = location.hash.match(/^#c=([^&]+)/);
+      if (!m) return false;
+      const data = decodeState(m[1]);
+      if (!data) return false;
+      // basic shape validation
+      state.stats.history    = Array.isArray(data.history) ? data.history : [];
+      state.stats.subelements= typeof data.subelements === 'object' && data.subelements ? data.subelements : {};
+      state.stats.groups     = typeof data.groups === 'object' && data.groups ? data.groups : {};
+      // Render charts right away
+      renderAllCharts(state.stats);
+      return true;
+    }
+
+    // ---------- Wire up UI ----------
     document.getElementById('loadBtn').addEventListener('click', async () => {
       try {
         state.all = await loadFromFetch();
-        state.selected = buildExam(state.all);
-        renderExam();
+        startNewExam(state.all);
         document.getElementById('newExamBtn').disabled = false;
       } catch (e) {
         alert(`Could not load extra_pool.json: ${e.message}`);
@@ -241,8 +414,7 @@
       if (!file) return;
       try {
         state.all = await loadFromFile(file);
-        state.selected = buildExam(state.all);
-        renderExam();
+        startNewExam(state.all);
         document.getElementById('newExamBtn').disabled = false;
       } catch (e) {
         alert(`Could not read JSON file: ${e.message}`);
@@ -250,14 +422,14 @@
     });
 
     document.getElementById('newExamBtn').addEventListener('click', () => {
-      if (!state.all.length) {
-        alert('Load questions first.');
-        return;
-      }
-      state.selected = buildExam(state.all);
-      document.getElementById('summary').hidden = true;
-      renderExam();
+      // Encode cumulative stats in the URL and "hyperlink" to it
+      updateHashWithStats();
+      // Build a fresh test without reloading the whole page
+      if (state.all.length) startNewExam(state.all);
     });
+
+    // On first load: if hash has #c=..., restore and render charts
+    restoreStatsFromHash();
   </script>
 </body>
 </html>
