@@ -184,7 +184,7 @@
 
         const caret = document.createElement('button');
         caret.className = 'caret-btn';
-        caret.textContent = (currentExpandedSub === sub) ? '▲' : '▼';
+        caret.innerHTML = (currentExpandedSub === sub) ? '&#9650;' : '&#9660;';
 
         // Only show caret if we have any groups recorded for this subelement
         const hasGroups = !!(groupsStats && groupsStats[sub] && Object.keys(groupsStats[sub]).length);
@@ -194,16 +194,16 @@
           if (currentExpandedSub === sub) {
             // collapse
             currentExpandedSub = null;
-            caret.textContent = '▼';
+            caret.innerHTML = '&#9660;';  // ▼
             document.getElementById('groupDetails').innerHTML = '';
             destroyCharts(groupCharts);
             // reset other carets to ▼
-            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.textContent = '▼'; });
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9660;'; });
           } else {
             // expand this sub, collapse any previous
             currentExpandedSub = sub;
-            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.textContent = '▼'; });
-            caret.textContent = '▲';
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9650;'; });
+            caret.innerHTML = '&#9650;';  // ▲
             renderGroupStacksForSub(sub);
           }
         });
