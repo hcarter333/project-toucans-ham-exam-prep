@@ -1,22 +1,15 @@
 """
 Parse the 2024–2028 Extra Class (FCC Element 4) question pool PDF to JSON.
 
-Rules (per user requirements):
+Rules:
 - A question ALWAYS starts on a line that begins with "E<digit><letter><two digits>", e.g. "E1A01".
 - Each question block ends with a line containing exactly "~~".
 - Ignore any other text between/around questions (e.g., title pages, notes).
-- Header format: E1A01 (D) [optional refs] <question text may start here or next lines>
+- Header format: E1A01 (D) [optional refs] <question text may be on same line or the next lines>
 - Choices: lines starting with "A.", "B.", "C.", "D." (can wrap across lines).
 
 Schema:
-- id: unique sequential primary key (1..N)
-- question: full question text
-- class: always "E"
-- subelement: digit after leading E (E1A01 -> "1")
-- group_index: letter after subelement (E1A01 -> "A")
-- group_number: two digits after group_index (E1A01 -> "01")
-- answer: correct answer letter from parentheses in header (A-D)
-- answer_a .. answer_d: choice texts; multi-line safe
+- id, question, class="E", subelement, group_index, group_number, answer, answer_a..answer_d
 """
 
 import argparse
@@ -28,14 +21,12 @@ from collections import Counter
 
 from PyPDF2 import PdfReader
 
-# Header must be at START of the line (ignore any other text)
-# Examples: "E1A01 (D) [97.305, 97.307(b)] Why ... ?"
 HEADER_RE = re.compile(
     r'^\s*'  # allow leading spaces
-    r'(?P<code>E(?P<subelement>\d)(?P<group_index>[A-Z])(?P<group_number>\d{2}))'
-    r'\s*\((?P<answer>[A-D])\)\s*'
-    r'(?:\[[^\]]*\]\s*)?'
-    r'(?P<qstart>.*)$'
+    r'(?P<code>E(?P<subelement>\d)(?P<group_index>[A-Z])(?P<group_number>\d\s?\d))'
+    r'\s*\(\s*(?P<answer>[A-D])\s*\)\s*'   # <-- allow spaces inside parentheses
+    r'(?:\[[^\]]*\]\s*)?'                  # optional bracketed citations
+    r'(?P<qstart>.*)$'                     # may be empty; question can start on following line(s)
 )
 
 CHOICE_RE = re.compile(r'^\s*([A-D])\.\s*(.*\S)?\s*$')
@@ -49,6 +40,7 @@ def extract_pdf_lines(pdf_path: Path):
         txt = page.extract_text() or ""
         for ln in txt.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
             ln = ln.replace("\u00a0", " ").replace("\xad", "")  # nbsp, soft hyphen
+            print(ln)
             out.append(ln.rstrip())
     return out
 
@@ -66,14 +58,13 @@ def parse_pool(lines, force_class="E"):
 
     while i < n:
         line = lines[i]
-
-        # Only treat as a new question if the line STARTS with the header pattern
         m = HEADER_RE.match(line)
         if not m:
             i += 1
             continue
 
         gd = m.groupdict()
+        gd["group_number"] = gd["group_number"].replace(" ", "")
         rec = {
             "id": qid,
             "question": "",
@@ -89,12 +80,14 @@ def parse_pool(lines, force_class="E"):
         }
         qid += 1
 
-        # Build question text from qstart and subsequent lines until first choice or separator
+        # --- Build question text ---
         q_parts = []
-        if gd["qstart"].strip():
-            q_parts.append(gd["qstart"].strip())
-        # NEW: even if qstart is empty, still scan following lines for question text
+        qstart = (gd["qstart"] or "").strip()
+        if qstart:
+            q_parts.append(qstart)
+
         i += 1
+        # Always scan forward for question continuation even if qstart is empty
         while i < n:
             ln = lines[i]
             if SEP_RE.match(ln) or HEADER_RE.match(ln) or CHOICE_RE.match(ln):
@@ -108,7 +101,7 @@ def parse_pool(lines, force_class="E"):
 
         rec["question"] = " ".join(q_parts).strip()
 
-        # Collect choices A..D (multi-line), until the separator or unexpected header
+        # --- Collect choices A..D (multi-line) ---
         choice_bufs = {"A": [], "B": [], "C": [], "D": []}
         current = None
 
@@ -136,7 +129,7 @@ def parse_pool(lines, force_class="E"):
                 i += 1
                 continue
 
-            # Uninteresting line between header/question and first choice
+            # Uninteresting line inside the block
             i += 1
 
         # Clean assignment
@@ -151,29 +144,22 @@ def parse_pool(lines, force_class="E"):
 
         items.append(rec)
 
-        # Consume the required separator if present
+        # Consume the separator if present
         if i < n and SEP_RE.match(lines[i]):
             i += 1
-
-        # Continue scanning for the next header from current i
 
     return items
 
 def print_summary(records):
     total = len(records)
     class_counts = Counter(r["class"] for r in records)
-    # subelement counts: E1..E9 etc
     sub_counts = Counter(f"E{r['subelement']}" for r in records)
-    # group counts: E1A, E1B, ...
     group_counts = Counter(f"E{r['subelement']}{r['group_index']}" for r in records)
 
-    def sort_sub_key(k):
-        # k is like 'E1', 'E10' -> sort by numeric part
+    def sort_sub_key(k):  # 'E1', 'E10' -> sort numerically
         return int(k[1:])
 
-    def sort_group_key(k):
-        # k like 'E1A', 'E10C' -> sort by numeric, then letter
-        # split numeric part from after 'E' up to last char
+    def sort_group_key(k):  # 'E1A', 'E10C'
         num = int(k[1:-1])
         letter = k[-1]
         return (num, letter)
@@ -181,17 +167,14 @@ def print_summary(records):
     print("\n--- Extraction Summary ---")
     print(f"Total questions: {total}")
 
-    # By class/element (E)
     print("\nBy element/class:")
     for k in sorted(class_counts.keys()):
         print(f"  {k}: {class_counts[k]}")
 
-    # By subelement E1..E10
     print("\nBy subelement:")
     for k in sorted(sub_counts.keys(), key=sort_sub_key):
         print(f"  {k}: {sub_counts[k]}")
 
-    # By group E1A..E10H
     print("\nBy group:")
     for k in sorted(group_counts.keys(), key=sort_group_key):
         print(f"  {k}: {group_counts[k]}")
@@ -219,7 +202,6 @@ def main():
     else:
         print(data)
 
-    # Print the summary to stdout
     print_summary(records)
 
 if __name__ == "__main__":
