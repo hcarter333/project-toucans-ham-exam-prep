@@ -53,7 +53,7 @@
   },
   {
     "id": 5,
-    "question": "Who must be in physical control of the station apparatus of an amate ur station aboard any vessel or craft that is documented or registered in the United States?",
+    "question": "Who must be in physical control of the station apparatus of an amateur station aboard any vessel or craft that is documented or registered in the United States?",
     "class": "E",
     "subelement": "1",
     "group_index": "A",
@@ -670,7 +670,7 @@
     "group_index": "E",
     "group_number": "06",
     "answer": "C",
-    "answer_a": "The VEC coordi nating the session",
+    "answer_a": "The VEC coordinating the session",
     "answer_b": "The designated monitoring VE",
     "answer_c": "Each administering VE",
     "answer_d": "Only the VE session manager"
@@ -2141,7 +2141,7 @@
     "answer": "D",
     "answer_a": "Solar flux",
     "answer_b": "Electric field intensity",
-    "answer_c": "Magnetic de clination",
+    "answer_c": "Magnetic declination",
     "answer_d": "Digital- mode and CW signals"
   },
   {
@@ -5058,7 +5058,7 @@
   },
   {
     "id": 390,
-    "question": "What is the purpose of Q1 in the ci rcuit shown in Figure E7 -2?",
+    "question": "What is the purpose of Q1 in the circuit shown in Figure E7 -2?",
     "class": "E",
     "subelement": "7",
     "group_index": "D",
