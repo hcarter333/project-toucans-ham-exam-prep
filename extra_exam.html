@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Extra Class Practice Exam (with Charts)</title>
+  <title>Extra Class Practice Exam (Stacked Bars)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -24,11 +24,14 @@
     .incorrect { color:#b00020; }
     #summary { margin-top:2rem; padding:1rem; border:2px dashed #ddd; border-radius:12px; background:#fafafa; }
     #charts { margin-top:2rem; }
-    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-    .chart-card { border:1px solid #eee; border-radius:12px; padding:12px; }
     .section-title { margin-top:2rem; margin-bottom:.5rem; }
-    details > summary { cursor: pointer; }
     .charts-note { color:#555; font-size:.9rem; margin-bottom:.5rem; }
+
+    /* Chart cards + 10-across layout */
+    .grid10 { display:grid; grid-template-columns: repeat(10, minmax(80px, 1fr)); gap: 8px; }
+    .chart-card { border:1px solid #eee; border-radius:12px; padding:8px; }
+    .chart-title { font-weight:600; font-size:.9rem; margin:0 0 6px 0; }
+    .sub-section { margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -43,13 +46,13 @@
 
   <div id="charts">
     <h2 class="section-title">Performance Dashboard</h2>
-    <div class="charts-note">If you’ve taken tests before (or arrived with a <code>#c=...</code> URL), your cumulative charts and score history appear here.</div>
-    <div class="chart-card">
+    <div class="charts-note">Cumulative charts and score history (persisted via <code>#c=...</code> in the URL).</div>
+    <div class="chart-card" style="margin-bottom:12px;">
       <canvas id="scoresOverTime" height="140"></canvas>
     </div>
 
     <h3 class="section-title">Correct vs Wrong by Subelement</h3>
-    <div id="subelementGrid" class="grid"></div>
+    <div id="subelementGrid" class="grid10"></div>
 
     <h3 class="section-title">Correct vs Wrong by Group (within each Subelement)</h3>
     <div id="groupGrid"></div>
@@ -95,11 +98,11 @@
 
     // ---------- Charts ----------
     let scoresChart = null;
-    const pieCharts = []; // keep references to destroy/redraw
+    const smallCharts = []; // keep references to destroy/redraw
 
     function clearCharts() {
       if (scoresChart) { scoresChart.destroy(); scoresChart = null; }
-      pieCharts.splice(0).forEach(ch => ch.destroy());
+      smallCharts.splice(0).forEach(ch => ch.destroy());
       document.getElementById('subelementGrid').innerHTML = '';
       document.getElementById('groupGrid').innerHTML = '';
     }
@@ -115,56 +118,79 @@
       });
     }
 
-    function addPie(parent, title, correct, wrong) {
+    // Small stacked bar: green (correct) bottom, red (wrong) top
+    function addStackedBar(parent, title, correct, wrong) {
       const wrap = document.createElement('div');
       wrap.className = 'chart-card';
       const h = document.createElement('div');
-      h.textContent = `${title} (correct ${correct}, wrong ${wrong})`;
-      h.style.fontWeight = '600';
-      h.style.marginBottom = '8px';
+      h.className = 'chart-title';
+      h.textContent = `${title}`;
       const canvas = document.createElement('canvas');
-      canvas.height = 140;
+      canvas.height = 110; // compact
       wrap.appendChild(h);
       wrap.appendChild(canvas);
       parent.appendChild(wrap);
 
       const chart = new Chart(canvas.getContext('2d'), {
-        type: 'pie',
+        type: 'bar',
         data: {
-          labels: ['Correct', 'Wrong'],
-          datasets: [{ data: [correct, wrong] }]
+          labels: [''],
+          datasets: [
+            { label: 'Correct', data: [correct], stack: 's', backgroundColor: '#0a7b34' },
+            { label: 'Wrong',   data: [wrong],   stack: 's', backgroundColor: '#b00020' }
+          ]
         },
-        options: { responsive: true }
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                footer: (items) => {
+                  // Show totals in tooltip footer
+                  const total = correct + wrong;
+                  return `Total: ${total}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true, ticks: { display: false }, grid: { display: false }, border: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+          }
+        }
       });
-      pieCharts.push(chart);
+      smallCharts.push(chart);
     }
 
-    function renderSubelementPies(subStats) {
+    function renderSubelementStacks(subStats) {
       const grid = document.getElementById('subelementGrid');
       const keys = Object.keys(subStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
       keys.forEach(k => {
         const {correct=0, wrong=0} = subStats[k] || {};
-        addPie(grid, k, correct, wrong);
+        addStackedBar(grid, k, correct, wrong);
       });
     }
 
-    function renderGroupPies(groupStats) {
+    function renderGroupStacks(groupStats) {
       const container = document.getElementById('groupGrid');
       container.innerHTML = '';
       const subs = Object.keys(groupStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+
       subs.forEach(sub => {
         const section = document.createElement('section');
+        section.className = 'sub-section';
         const h = document.createElement('h4');
         h.textContent = `Groups in ${sub}`;
         section.appendChild(h);
 
         const grid = document.createElement('div');
-        grid.className = 'grid';
+        grid.className = 'grid10';
 
         const groups = Object.keys(groupStats[sub]).sort();
         groups.forEach(g => {
           const {correct=0, wrong=0} = groupStats[sub][g] || {};
-          addPie(grid, g, correct, wrong);
+          addStackedBar(grid, g, correct, wrong);
         });
 
         section.appendChild(grid);
@@ -175,24 +201,23 @@
     function renderAllCharts(stats) {
       clearCharts();
       renderScoresOverTime(stats.history || []);
-      renderSubelementPies(stats.subelements || {});
-      renderGroupPies(stats.groups || {});
+      renderSubelementStacks(stats.subelements || {});
+      renderGroupStacks(stats.groups || {});
     }
 
     // ---------- App state ----------
     const state = {
-      all: [],            // all questions
-      selected: [],       // one random question per unique E{n}{group_index}
-      answered: new Map(),// id -> { selected, correct }
+      all: [],
+      selected: [],
+      answered: new Map(),
       presentedIds: [],
       correctIds: new Set(),
       wrongIds: new Set(),
       done: false,
-      // cumulative stats persisted via #c=
       stats: {
-        history: [],                   // [{ts, scorePct}]
-        subelements: {},               // { E1:{correct,wrong}, ... }
-        groups: {}                     // { E1:{ A:{correct,wrong}, ... }, E2:{...} }
+        history: [],       // [{ts, scorePct}]
+        subelements: {},   // { E1:{correct,wrong}, ... }
+        groups: {}         // { E1:{ A:{correct,wrong}, ... }, ... }
       }
     };
 
@@ -233,7 +258,7 @@
 
     function renderExam() {
       const container = document.getElementById('exam');
-      container.innerHTML = ""; // clear test
+      container.innerHTML = "";
       state.answered.clear();
       state.correctIds.clear();
       state.wrongIds.clear();
@@ -278,7 +303,7 @@
 
         btn.addEventListener('click', () => {
           if (!select.value) { alert('Please choose an answer first.'); return; }
-          if (select.disabled) return; // already graded
+          if (select.disabled) return;
 
           const chosenLetter = select.value;
           const correctLetter = (q.answer || '').trim().toUpperCase();
@@ -323,7 +348,6 @@
       const pct = Math.round((correct / total) * 100);
       const pass = pct >= 80;
 
-      // Summary text
       const summary = document.getElementById('summary');
       const scoreLine = document.getElementById('scoreLine');
       scoreLine.textContent = pass
@@ -338,19 +362,11 @@
       document.getElementById('tracking').textContent = JSON.stringify(tracking, null, 2);
       summary.hidden = false;
 
-      // Update cumulative stats (per subelement & per group)
       accumulateStatsFromCurrentTest();
-
-      // Append score history
       state.stats.history.push({ ts: nowIso(), scorePct: pct });
 
-      // Draw charts
       renderAllCharts(state.stats);
-
-      // Enable new-exam button
       document.getElementById('newExamBtn').disabled = false;
-
-      // Scroll to charts
       window.scrollTo({ top: document.getElementById('charts').offsetTop, behavior: 'smooth' });
     }
 
@@ -360,11 +376,9 @@
         const keyGrp = q.group_index;
         const wasCorrect = state.correctIds.has(q.id);
 
-        // subelement bucket
         if (!state.stats.subelements[keySub]) state.stats.subelements[keySub] = { correct:0, wrong:0 };
         state.stats.subelements[keySub][wasCorrect ? 'correct':'wrong']++;
 
-        // group bucket inside subelement
         if (!state.stats.groups[keySub]) state.stats.groups[keySub] = {};
         if (!state.stats.groups[keySub][keyGrp]) state.stats.groups[keySub][keyGrp] = { correct:0, wrong:0 };
         state.stats.groups[keySub][keyGrp][wasCorrect ? 'correct':'wrong']++;
@@ -381,7 +395,7 @@
     function updateHashWithStats() {
       const encoded = encodeState(state.stats);
       const url = location.origin + location.pathname + '#c=' + encoded;
-      location.assign(url); // navigate to URL with hash (keeps page, updates hash)
+      location.assign(url);
     }
 
     function restoreStatsFromHash() {
@@ -389,16 +403,14 @@
       if (!m) return false;
       const data = decodeState(m[1]);
       if (!data) return false;
-      // basic shape validation
-      state.stats.history    = Array.isArray(data.history) ? data.history : [];
-      state.stats.subelements= typeof data.subelements === 'object' && data.subelements ? data.subelements : {};
-      state.stats.groups     = typeof data.groups === 'object' && data.groups ? data.groups : {};
-      // Render charts right away
+      state.stats.history     = Array.isArray(data.history) ? data.history : [];
+      state.stats.subelements = typeof data.subelements === 'object' && data.subelements ? data.subelements : {};
+      state.stats.groups      = typeof data.groups === 'object' && data.groups ? data.groups : {};
       renderAllCharts(state.stats);
       return true;
     }
 
-    // ---------- Wire up UI ----------
+    // ---------- UI wiring ----------
     document.getElementById('loadBtn').addEventListener('click', async () => {
       try {
         state.all = await loadFromFetch();
@@ -422,10 +434,8 @@
     });
 
     document.getElementById('newExamBtn').addEventListener('click', () => {
-      // Encode cumulative stats in the URL and "hyperlink" to it
-      updateHashWithStats();
-      // Build a fresh test without reloading the whole page
-      if (state.all.length) startNewExam(state.all);
+      updateHashWithStats();          // persist cumulative stats in URL
+      if (state.all.length) startNewExam(state.all); // build next exam without reload
     });
 
     // On first load: if hash has #c=..., restore and render charts
