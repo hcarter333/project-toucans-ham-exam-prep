@@ -46,9 +46,6 @@
   <h1>Extra Class Practice Exam</h1>
 
   <div class="toolbar">
-    <button id="loadBtn" class="btn">Load questions (extra_pool.json)</button>
-    <span class="muted">or choose a JSON file:</span>
-    <input id="fileInput" type="file" accept="application/json" />
     <button id="newExamBtn" class="btn" disabled>New exam</button>
   </div>
 
@@ -487,27 +484,6 @@
     }
 
     // ---------- UI wiring ----------
-    document.getElementById('loadBtn').addEventListener('click', async () => {
-      try {
-        state.all = await loadFromFetch();
-        startNewExam(state.all);
-        document.getElementById('newExamBtn').disabled = false;
-      } catch (e) {
-        alert(`Could not load extra_pool.json: ${e.message}`);
-      }
-    });
-
-    document.getElementById('fileInput').addEventListener('change', async (ev) => {
-      const file = ev.target.files?.[0];
-      if (!file) return;
-      try {
-        state.all = await loadFromFile(file);
-        startNewExam(state.all);
-        document.getElementById('newExamBtn').disabled = false;
-      } catch (e) {
-        alert(`Could not read JSON file: ${e.message}`);
-      }
-    });
 
     document.getElementById('newExamBtn').addEventListener('click', () => {
       updateHashWithStats();          // persist cumulative stats in URL
@@ -516,6 +492,24 @@
 
     // On first load: restore from #c= if present
     restoreStatsFromHash();
-  </script>
+
+
+const QUESTION_POOL_URL =
+  "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/extra_pool.json";
+
+async function init() {
+  try {
+    const res = await fetch(QUESTION_POOL_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.all = await res.json();
+    startNewExam(state.all);
+    document.getElementById('newExamBtn').disabled = false;
+  } catch (e) {
+    console.error("Could not auto-load questions:", e);
+    alert("Could not load question pool from GitHub.");
+  }
+}
+window.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>
