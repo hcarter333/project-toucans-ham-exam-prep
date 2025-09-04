@@ -748,8 +748,8 @@
     "group_index": "F",
     "group_number": "01",
     "answer": "B",
-    "answer_a": "Only on amateur frequencies above 50 MHz B. Only on amateur frequencies above 222 MHz",
-    "answer_b": "",
+    "answer_a": "Only on amateur frequencies above 50 MHz",
+    "answer_b": "Only on amateur frequencies above 222 MHz",
     "answer_c": "Only on amateur frequencies above 420 MHz",
     "answer_d": "Only on amateur frequencies above 144 MHz"
   },
@@ -1021,8 +1021,8 @@
     "group_index": "A",
     "group_number": "11",
     "answer": "B",
-    "answer_a": "A linearly polarized antenna B. A circularly polarized antenna",
-    "answer_b": "",
+    "answer_a": "A linearly polarized antenna",
+    "answer_b": "A circularly polarized antenna",
     "answer_c": "An isotropic antenna",
     "answer_d": "A log -periodic dipole array"
   },
@@ -1970,8 +1970,8 @@
     "group_index": "B",
     "group_number": "09",
     "answer": "A",
-    "answer_a": "Around the solstices, especially the summer solstice B. Around the solstices, especially the winter solstice",
-    "answer_b": "",
+    "answer_a": "Around the solstices, especially the summer solstice",
+    "answer_b": "Around the solstices, especially the winter solstice",
     "answer_c": "Around the equinoxes, especially the spring equinox",
     "answer_d": "Around the equinoxes, especially the fall equinox"
   },
@@ -2283,8 +2283,8 @@
     "group_number": "08",
     "answer": "D",
     "answer_a": "Directional wattmeter",
-    "answer_b": "Vector network analyzer C. Antenna analyzer",
-    "answer_c": "",
+    "answer_b": "Vector network analyzer",
+    "answer_c": "Antenna analyzer",
     "answer_d": "All these choices are correct"
   },
   {
@@ -2869,8 +2869,8 @@
     "answer": "B",
     "answer_a": "Broadband white noise",
     "answer_b": "Impulse noise",
-    "answer_c": "Hum and buzz D. All these choices are correct",
-    "answer_d": ""
+    "answer_c": "Hum and buzz",
+    "answer_d": "All these choices are correct"
   },
   {
     "id": 222,
@@ -3147,13 +3147,13 @@
   },
   {
     "id": 243,
-    "question": "What is the half- power bandwidth of a resonant circuit that has a resonant frequency of 7.1 MHz and a Q of 150? A. 157.8 Hz",
+    "question": "What is the half- power bandwidth of a resonant circuit that has a resonant frequency of 7.1 MHz and a Q of 150?",
     "class": "E",
     "subelement": "5",
     "group_index": "A",
     "group_number": "11",
     "answer": "C",
-    "answer_a": "",
+    "answer_a": "157.8 Hz",
     "answer_b": "315.6 Hz",
     "answer_c": "47.3 kHz",
     "answer_d": "23.67 kHz"
@@ -3948,8 +3948,8 @@
     "answer": "A",
     "answer_a": "Forward DC bias current",
     "answer_b": "A variable RF reference voltage",
-    "answer_c": "Reverse voltage larger than the RF signal D. Capacitance of an RF coupling capacitor",
-    "answer_d": ""
+    "answer_c": "Reverse voltage larger than the RF signal",
+    "answer_d": "Capacitance of an RF coupling capacitor"
   },
   {
     "id": 305,
@@ -4142,8 +4142,8 @@
     "group_number": "04",
     "answer": "B",
     "answer_a": "To simplify assembly during manufactur ing",
-    "answer_b": "To reduce power loss from eddy currents in the core C. To increase the cutoff frequency by reducing capacitance",
-    "answer_c": "",
+    "answer_b": "To reduce power loss from eddy currents in the core",
+    "answer_c": "To increase the cutoff frequency by reducing capacitance",
     "answer_d": "To save cos t by reducing the amount of magnetic material"
   },
   {
@@ -4272,8 +4272,8 @@
     "group_number": "02",
     "answer": "A",
     "answer_a": "DIP",
-    "answer_b": "PLCC C. BGA",
-    "answer_c": "",
+    "answer_b": "PLCC",
+    "answer_c": "BGA",
     "answer_d": "SOT"
   },
   {
@@ -4402,8 +4402,8 @@
     "group_number": "12",
     "answer": "C",
     "answer_a": "Excessive dielectric loss",
-    "answer_b": "Epoxy coating is conductive above 300 MHz C. Excessive lead length",
-    "answer_c": "",
+    "answer_b": "Epoxy coating is conductive above 300 MHz",
+    "answer_c": "Excessive lead length",
     "answer_d": "Unsuitable for combining analog and digital signals"
   },
   {
@@ -5779,8 +5779,8 @@
     "group_index": "H",
     "group_number": "09",
     "answer": "A",
-    "answer_a": "A direct digital synthesizer B. A hybrid synthesizer",
-    "answer_b": "",
+    "answer_a": "A direct digital synthesizer",
+    "answer_b": "A hybrid synthesizer",
     "answer_c": "A phase -locked loop synthesizer",
     "answer_d": "A direct conversion synthesizer"
   },
@@ -5883,8 +5883,8 @@
     "group_index": "A",
     "group_number": "04",
     "answer": "B",
-    "answer_a": "An abnormal condition where the converter cannot settle on a value to represent the signal B. A small amount of noise added to the input signal to reduce quantization no ise",
-    "answer_b": "",
+    "answer_a": "An abnormal condition where the converter cannot settle on a value to represent the signal",
+    "answer_b": "A small amount of noise added to the input signal to reduce quantization noise",
     "answer_c": "An error caused by irregular quantization step size",
     "answer_d": "A method of decimation by randomly skipping samples"
   },
