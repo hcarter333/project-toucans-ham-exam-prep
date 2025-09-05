@@ -3459,7 +3459,7 @@
   },
   {
     "id": 267,
-    "question": "Which point on Figure E5-1 best represents the impedance of a series circuit consisting of a 400 -ohm resistor and a 38 -picofarad capacitor at 14 MHz?",
+    "question": "Which point on Figure E5-1 best represents the impedance of a series circuit consisting of a 400-ohm resistor and a 38-picofarad capacitor at 14 MHz?",
     "class": "E",
     "subelement": "5",
     "group_index": "C",
@@ -3472,7 +3472,7 @@
   },
   {
     "id": 268,
-    "question": "Which point in Figure E5 -1 best represents the impedance of a series c ircuit consisting of a 300 -ohm resistor and an 18 -microhenry inductor at 3.505 MHz?",
+    "question": "Which point in Figure E5-1 best represents the impedance of a series circuit consisting of a 300-ohm resistor and an 18-microhenry inductor at 3.505 MHz?",
     "class": "E",
     "subelement": "5",
     "group_index": "C",
@@ -3485,7 +3485,7 @@
   },
   {
     "id": 269,
-    "question": "Which point on Figure E5 -1 best represents the impedance of a series circuit consisting of a 300 -ohm resistor and a 19 -picofarad capacitor at 21.200 MHz?",
+    "question": "Which point on Figure E5 -1 best represents the impedance of a series circuit consisting of a 300 -ohm resistor and a 19-picofarad capacitor at 21.200 MHz?",
     "class": "E",
     "subelement": "5",
     "group_index": "C",
@@ -6553,7 +6553,7 @@
   },
   {
     "id": 505,
-    "question": "Which frequency band has the small est first Fresnel zone?",
+    "question": "Which frequency band has the smallest first Fresnel zone?",
     "class": "E",
     "subelement": "9",
     "group_index": "A",
