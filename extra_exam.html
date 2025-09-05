@@ -16,7 +16,9 @@
     .muted { color:#777; font-size:.9rem; }
     .card { border:1px solid #e5e5e5; border-radius:12px; padding:1rem; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,.05); }
     .qid { font-weight:600; color:#555; margin-bottom:.25rem; }
-    .qtext { margin:.25rem 0 .75rem; line-height:1.5; }
+    .qtext { margin:.25rem 0 .5rem; line-height:1.5; }
+    .figure { margin:.25rem 0 .75rem; }
+    .figure img { max-width:100%; height:auto; border:1px solid #eee; border-radius:8px; }
     .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
     select { padding:.4rem .5rem; max-width: 100%; white-space: normal;  }
     .result { margin-top:.5rem; font-weight:600; }
@@ -75,7 +77,9 @@
   </div>
 
   <script>
-    
+    // ---------- Config ----------
+    const FIG_BASE_URL = "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/img/";
+
     // ---------- Helpers ----------
     function groupKey(q) { return `E${q.subelement}${q.group_index}`; }
     function subKey(q)   { return `E${q.subelement}`; }
@@ -86,6 +90,19 @@
     }
     function sanitize(text) { return (text ?? "").toString().replace(/\s+/g, " ").trim(); }
     const nowIso = () => new Date().toISOString();
+
+    // Detect figure label in free text. Handles:
+    // "Figure E9-3", "Figure E9 -3", "Figure E9 – 3", "Figure E 9 - 3"
+    function findFigureSlug(text) {
+      if (!text) return null;
+      const re = /Figure\s+([A-Za-z])\s*([0-9]+)\s*[-–—]\s*([0-9]+)/i;
+      const m = text.match(re);
+      if (!m) return null;
+      const letter = m[1].toLowerCase();
+      const major  = m[2]; // e.g., 9
+      const minor  = m[3]; // e.g., 3
+      return `${letter}${major}-${minor}`; // e.g., "e9-3"
+    }
 
     // Base64URL encode/decode JSON for hash
     function encodeState(obj) {
@@ -151,22 +168,12 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-          //enabled: true,
-          backgroundColor: '#333',          // dark background
-          titleColor: '#fff',
-          bodyColor: '#fff',                // white text
-          titleFont: {
-            family: 'Verdana, sans-serif',  // font family for title
-            size: 4,
-            weight: 'normal'
-          },
-          bodyFont: {
-            family: 'Verdana, sans-serif',  // font family for body
-            size: 12
-          },
-              callbacks: {
-                footer: () => `Total: ${correct + wrong}`
-              }
+              backgroundColor: '#333',
+              titleColor: '#fff',
+              bodyColor: '#fff',
+              titleFont: { family: 'Verdana, sans-serif', size: 12, weight: 'bold' },
+              bodyFont: { family: 'Verdana, sans-serif', size: 12 },
+              callbacks: { footer: (items) => `Total: ${correct + wrong}` }
             }
           },
           scales: {
@@ -199,24 +206,20 @@
         caret.className = 'caret-btn';
         caret.innerHTML = (currentExpandedSub === sub) ? '&#9650;' : '&#9660;';
 
-        // Only show caret if we have any groups recorded for this subelement
         const hasGroups = !!(groupsStats && groupsStats[sub] && Object.keys(groupsStats[sub]).length);
         if (!hasGroups) caret.hidden = true;
 
         caret.addEventListener('click', () => {
           if (currentExpandedSub === sub) {
-            // collapse
             currentExpandedSub = null;
-            caret.innerHTML = '&#9660;';  // ▼
+            caret.innerHTML = '&#9660;';
             document.getElementById('groupDetails').innerHTML = '';
             destroyCharts(groupCharts);
-            // reset other carets to ▼
             Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9660;'; });
           } else {
-            // expand this sub, collapse any previous
             currentExpandedSub = sub;
-            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9650;'; });
-            caret.innerHTML = '&#9650;';  // ▲
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9660;'; });
+            caret.innerHTML = '&#9650;';
             renderGroupStacksForSub(sub);
           }
         });
@@ -236,12 +239,10 @@
     }
 
     function renderGroupStacksForSub(sub) {
-      // Clear previous group charts
       const holder = document.getElementById('groupDetails');
       holder.innerHTML = '';
       destroyCharts(groupCharts);
 
-      // Build section for this sub
       const section = document.createElement('section');
       section.className = 'sub-section';
 
@@ -268,7 +269,6 @@
         title.textContent = `${sub}${g}`;
 
         row.appendChild(title);
-        // no caret in group tiles
         card.appendChild(row);
 
         const canvas = document.createElement('canvas');
@@ -288,7 +288,6 @@
       clearCharts();
       renderScoresOverTime(stats.history || []);
       renderSubelementStacks(stats.subelements || {}, stats.groups || {});
-      // group charts are lazy; nothing rendered here until a caret is clicked
     }
 
     // ---------- App state ----------
@@ -362,8 +361,25 @@
 
         const qtext = document.createElement('div');
         qtext.className = 'qtext';
-        qtext.textContent = sanitize(q.question);
+        const qTextStr = sanitize(q.question);
+        qtext.textContent = qTextStr;
         card.appendChild(qtext);
+
+        // --- New: detect and render figure if present ---
+        const slug = findFigureSlug(qTextStr);
+        if (slug) {
+          const figDiv = document.createElement('div');
+          figDiv.className = 'figure';
+          const img = document.createElement('img');
+          img.loading = 'lazy';
+          img.alt = `Figure ${slug.toUpperCase()}`;
+          img.src = FIG_BASE_URL + `${slug}.png`;
+          // If the image 404s, hide the figure container gracefully
+          img.onerror = () => { figDiv.remove(); };
+          figDiv.appendChild(img);
+          card.appendChild(figDiv);
+        }
+        // --- end figure insertion ---
 
         const controls = document.createElement('div');
         controls.className = 'controls';
@@ -497,7 +513,6 @@
     }
 
     // ---------- UI wiring ----------
-
     document.getElementById('newExamBtn').addEventListener('click', () => {
       updateHashWithStats();          // persist cumulative stats in URL
       if (state.all.length) startNewExam(state.all); // build next exam without reload
@@ -506,23 +521,22 @@
     // On first load: restore from #c= if present
     restoreStatsFromHash();
 
+    const QUESTION_POOL_URL =
+      "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/extra_pool.json";
 
-const QUESTION_POOL_URL =
-  "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/extra_pool.json";
-
-async function init() {
-  try {
-    const res = await fetch(QUESTION_POOL_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state.all = await res.json();
-    startNewExam(state.all);
-    document.getElementById('newExamBtn').disabled = false;
-  } catch (e) {
-    console.error("Could not auto-load questions:", e);
-    alert("Could not load question pool from GitHub.");
-  }
-}
-window.addEventListener('DOMContentLoaded', init);
-</script>
+    async function init() {
+      try {
+        const res = await fetch(QUESTION_POOL_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        state.all = await res.json();
+        startNewExam(state.all);
+        document.getElementById('newExamBtn').disabled = false;
+      } catch (e) {
+        console.error("Could not auto-load questions:", e);
+        alert("Could not load question pool from GitHub.");
+      }
+    }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
 </body>
 </html>
