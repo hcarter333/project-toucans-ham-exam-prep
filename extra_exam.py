@@ -1,3 +1,4 @@
+
 """
 extra_exam.py — prefers local figure PNGs (img/<slug>.png) and
 adds robust state handling for ChatGPT Projects.
@@ -131,6 +132,26 @@ class ExamSession:
         out = {"stats": self.stats.to_dict(), "current": self.current.to_dict()}
         with open(self.state_path, "w", encoding="utf-8") as f: json.dump(out, f, indent=2)
 
+    # --- NEW: state import/export helpers expected by exam_repl.py ---
+    def dump_state_base64(self) -> str:
+        """Return the entire state file (JSON) encoded as base64 text."""
+        if not self.state_path.exists():
+            self._save_state()
+        with open(self.state_path, "rb") as f:
+            raw = f.read()
+        return base64.b64encode(raw).decode("ascii")
+
+    def load_state_base64(self, b64: str) -> None:
+        """Replace state from a base64 JSON dump and reload in-memory objects."""
+        data = base64.b64decode((b64 or "").encode("ascii"))
+        # Basic validation: must be valid JSON with 'stats' and 'current'
+        obj = json.loads(data.decode("utf-8"))
+        if not isinstance(obj, dict) or "stats" not in obj or "current" not in obj:
+            raise ValueError("Provided data does not look like a valid session state")
+        with open(self.state_path, "wb") as f:
+            f.write(data)
+        self._load_or_init_state()
+
     def start_new_exam(self) -> None:
         buckets: Dict[str, List[dict]] = {}
         for q in self.pool: buckets.setdefault(_group_key(q), []).append(q)
@@ -197,8 +218,65 @@ class ExamSession:
         if total == 0: return "_(No questions in the current exam.)_"
         pct, passed = round((correct / total) * 100), (len(self.current.correct_ids) / total >= 0.8)
         self.current.done = True
+        # Update high-level stats
         self.stats.history.append({"ts": _now_iso(), "scorePct": pct})
+        # Update per-subelement stats based on answered questions
+        for qid, meta in self.current.answered.items():
+            q = self._q_by_id(qid)
+            subk = _sub_key(q)
+            self.stats.subelements.setdefault(subk, {"right": 0, "wrong": 0})
+            if meta.get("correct"):
+                self.stats.subelements[subk]["right"] += 1
+            else:
+                self.stats.subelements[subk]["wrong"] += 1
         self._save_state()
         return ("You passed with " if passed else "You failed with ") + f"{pct}% ({correct}/{total} correct)."
 
-    # Chart renderers unchanged...
+    # --- NEW: basic chart renderer used by exam_repl.py ---
+    def render_all_charts(self, out_dir: Path | None = None) -> List[Path]:
+        """Render a few helpful charts to PNG files. Returns list of file Paths."""
+        out_dir = Path(out_dir or self.state_path.parent)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        created: List[Path] = []
+
+        if plt is None:
+            # Matplotlib not available; skip quietly
+            return created
+
+        # 1) Score history line chart
+        if self.stats.history:
+            xs = [i + 1 for i, _ in enumerate(self.stats.history)]
+            ys = [int(h.get("scorePct", 0)) for h in self.stats.history]
+            plt.figure()
+            plt.plot(xs, ys, marker="o")
+            plt.xlabel("Attempt")
+            plt.ylabel("Score (%)")
+            plt.title("Practice Test Scores Over Time")
+            plt.ylim(0, 100)
+            p = out_dir / "score_history.png"
+            plt.savefig(p, bbox_inches="tight")
+            plt.close()
+            created.append(p)
+
+        # 2) Per-subelement bar chart
+        if self.stats.subelements:
+            labels = sorted(self.stats.subelements.keys())
+            right = [self.stats.subelements[k].get("right", 0) for k in labels]
+            wrong = [self.stats.subelements[k].get("wrong", 0) for k in labels]
+
+            # Stacked bars: right over wrong
+            import numpy as np
+            x = np.arange(len(labels))
+            plt.figure()
+            plt.bar(x, wrong, label="Wrong")
+            plt.bar(x, right, bottom=wrong, label="Right")
+            plt.xticks(x, labels, rotation=45, ha="right")
+            plt.ylabel("Count")
+            plt.title("Performance by Subelement")
+            plt.legend()
+            p2 = out_dir / "subelement_breakdown.png"
+            plt.savefig(p2, bbox_inches="tight")
+            plt.close()
+            created.append(p2)
+
+        return created
