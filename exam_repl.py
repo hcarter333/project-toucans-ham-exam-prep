@@ -34,8 +34,6 @@ def chat_repl(command: str) -> str:
     """Handle one chat command and return printable text."""
     sess = ExamSession(pool_path=DATA_DIR / 'extra_pool.json',
                        state_path=DATA_DIR / 'exam_state.json')
-    sess_d = ExamSession(pool_path=DATA_DIR / 'extra_pool.json',
-                       state_path=DATA_DIR / 'exam_state.json')
     t = (command or "").strip()
 
     if t.lower() in ("help", "?", "commands"):
@@ -54,7 +52,7 @@ def chat_repl(command: str) -> str:
 
     n = re.match(r"^disp ([0-9]*)\s*$", t, re.IGNORECASE)
     if n:
-        d_q = sess_d._question_markdown(sess._q_by_id(int(n)))
+        d_q = sess._question_markdown(sess._q_by_id(int(n)))
         return f"Diplay question:\n\n{d_q}"
 
     m = re.match(r"^([A-Da-d])\s*$", t, re.IGNORECASE)
