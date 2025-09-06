@@ -24,7 +24,7 @@ POOL_PATH = Path(os.getenv("EXTRA_POOL_PATH", str(DEFAULT_DIR / "extra_pool.json
 STATE_PATH = Path(os.getenv("EXAM_STATE_PATH", str(DEFAULT_DIR / "exam_state.json")))
 
 FIG_BASE_URL = "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/img/"
-FIG_LOCAL_DIR = Path("img")
+FIG_LOCAL_DIR = Path("/mnt/data")
 
 ANSWER_MAP = {"A": "answer_a", "B": "answer_b", "C": "answer_c", "D": "answer_d"}
 FIGURE_RE = re.compile(r"Figure\s+([A-Za-z])\s*([0-9]+)\s*[-–—]\s*([0-9]+)", re.I)
