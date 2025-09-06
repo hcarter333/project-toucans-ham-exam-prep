@@ -258,50 +258,63 @@ class ExamSession:
         return ("You passed with " if passed else "You failed with ") + f"{pct}% ({correct}/{total} correct)."
 
     # --- NEW: basic chart renderer used by exam_repl.py ---
-    def render_all_charts(self, out_dir: Path | None = None) -> List[Path]:
-        """Render a few helpful charts to PNG files. Returns list of file Paths."""
-        out_dir = Path(out_dir or self.state_path.parent)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        created: List[Path] = []
+def render_all_charts(self, out_dir: Path | None = None) -> List:
+    """
+    Render helpful charts to PNG files and also return live matplotlib figures
+    for inline display. Returns a list containing Path and Figure objects.
+    """
+    out_dir = Path(out_dir or self.state_path.parent)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    created: List = []
 
-        if plt is None:
-            # Matplotlib not available; skip quietly
-            return created
-
-        # 1) Score history line chart
-        if self.stats.history:
-            xs = [i + 1 for i, _ in enumerate(self.stats.history)]
-            ys = [int(h.get("scorePct", 0)) for h in self.stats.history]
-            plt.figure()
-            plt.plot(xs, ys, marker="o")
-            plt.xlabel("Attempt")
-            plt.ylabel("Score (%)")
-            plt.title("Practice Test Scores Over Time")
-            plt.ylim(0, 100)
-            p = out_dir / "score_history.png"
-            plt.savefig(p, bbox_inches="tight")
-            plt.close()
-            created.append(p)
-
-        # 2) Per-subelement bar chart
-        if self.stats.subelements:
-            labels = sorted(self.stats.subelements.keys())
-            right = [self.stats.subelements[k].get("right", 0) for k in labels]
-            wrong = [self.stats.subelements[k].get("wrong", 0) for k in labels]
-
-            # Stacked bars: right over wrong
-            import numpy as np
-            x = np.arange(len(labels))
-            plt.figure()
-            plt.bar(x, wrong, label="Wrong")
-            plt.bar(x, right, bottom=wrong, label="Right")
-            plt.xticks(x, labels, rotation=45, ha="right")
-            plt.ylabel("Count")
-            plt.title("Performance by Subelement")
-            plt.legend()
-            p2 = out_dir / "subelement_breakdown.png"
-            plt.savefig(p2, bbox_inches="tight")
-            plt.close()
-            created.append(p2)
-
+    if plt is None:
+        # Matplotlib not available; skip quietly
         return created
+
+    import numpy as np
+
+    # 1) Score history line chart
+    if self.stats.history:
+        xs = [i + 1 for i, _ in enumerate(self.stats.history)]
+        ys = [int(h.get("scorePct", 0)) for h in self.stats.history]
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(xs, ys, marker="o")
+        ax.set_xlabel("Attempt")
+        ax.set_ylabel("Score (%)")
+        ax.set_title("Practice Test Scores Over Time")
+        ax.set_ylim(0, 100)
+
+        p = out_dir / "score_history.png"
+        fig.tight_layout()
+        fig.savefig(p, bbox_inches="tight", dpi=150)
+
+        created.append(p)
+        created.append(fig)  # return live figure too
+
+    # 2) Per-subelement bar chart
+    if self.stats.subelements:
+        labels = sorted(self.stats.subelements.keys())
+        right = [self.stats.subelements[k].get("right", 0) for k in labels]
+        wrong = [self.stats.subelements[k].get("wrong", 0) for k in labels]
+
+        x = np.arange(len(labels))
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.bar(x, wrong, label="Wrong")
+        ax.bar(x, right, bottom=wrong, label="Right")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.set_ylabel("Count")
+        ax.set_title("Performance by Subelement")
+        ax.legend()
+
+        p2 = out_dir / "subelement_breakdown.png"
+        fig.tight_layout()
+        fig.savefig(p2, bbox_inches="tight", dpi=150)
+
+        created.append(p2)
+        created.append(fig)  # return live figure too
+
+    return created
