@@ -50,7 +50,13 @@ def chat_repl(command: str) -> str:
             "First question:\n\n" + first_q
         )
 
-    m = re.match(r"^([A-Da-d])\s*submit$", t, re.IGNORECASE)
+    n = re.match(r"^disp ([0-9]*)\s*$", t, re.IGNORECASE)
+    if n:
+        sess_d.start_new_exam()
+        d_q = sess_d._question_markdown(sess._q_by_id(int(n)))
+        return f"{result}\n\nNext question:\n\n{next_q}"
+
+    m = re.match(r"^([A-Da-d])\s*$", t, re.IGNORECASE)
     if m:
         letter = m.group(1).upper()
 
