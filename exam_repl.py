@@ -30,7 +30,6 @@ def _help_text() -> str:
         "      prints feedback; if the test ends, shows summary, charts, and a snapshot\n"
     )
 
-
 def chat_repl(command: str) -> str:
     """Handle one chat command and return printable text."""
     sess = ExamSession(pool_path=DATA_DIR / 'extra_pool.json',
@@ -55,13 +54,29 @@ def chat_repl(command: str) -> str:
     if m:
         letter = m.group(1).upper()
 
-        # If nothing is active yet, activate a question before grading
-        if sess.current.last_shown_id is None and _has_unanswered(sess):
-            _ = sess.next_question_markdown()
+        # IMPORTANT: do NOT auto-advance here — require an active question
+        if sess.current.last_shown_id is None:
+            # Gently show the next question instead of mis-grading
+            if any(int(qid) not in sess.current.answered for qid in sess.current.selected_ids):
+                qtext = sess.next_question_markdown()
+                return ("No question was active, so I’ve shown the next one below. "
+                        "Please submit A/B/C/D for THIS question.\n\n" + qtext)
+            return "There are no unanswered questions. Start a New Test."
 
-        result = sess.answer_current(letter)
+        # Capture the id/tag being graded so we can echo it
+        graded_qid = int(sess.current.last_shown_id)
+        try:
+            q = sess._q_by_id(graded_qid)
+            tag = f"E{q.get('subelement')}{q.get('group_index')}{q.get('group_number','')} (id {graded_qid})"
+        except Exception:
+            tag = f"id {graded_qid}"
 
-        if not _has_unanswered(sess):
+        # Grade the active question
+        result_core = sess.answer_current(letter)
+        result = f"[Graded {tag}] " + result_core
+
+        # Continue to display the next question after grading (unchanged behavior)
+        if not any(int(qid) not in sess.current.answered for qid in sess.current.selected_ids):
             summary = sess.finalize()
             sess.render_all_charts()
             b64 = sess.dump_state_base64()
@@ -76,7 +91,6 @@ def chat_repl(command: str) -> str:
             return f"{result}\n\nNext question:\n\n{next_q}"
 
     return _help_text()
-
 
 if __name__ == "__main__":
     import sys
