@@ -1,4 +1,3 @@
-
 """
 extra_exam.py — prefers local figure PNGs (img/<slug>.png) and
 adds robust state handling for ChatGPT Projects.
@@ -76,14 +75,22 @@ class CurrentExam:
 
     @staticmethod
     def from_dict(d: dict) -> "CurrentExam":
+        # NOTE: JSON forces object keys to strings. Convert answered keys back to int.
+        answered_raw = d.get("answered", {})
+        try:
+            answered_norm = {int(k): v for k, v in answered_raw.items()}
+        except Exception:
+            # If anything odd slips in, fall back to an empty dict rather than crashing
+            answered_norm = {}
+
         return CurrentExam(
-            selected_ids=list(d.get("selected_ids", [])),
-            presented_ids=list(d.get("presented_ids", [])),
-            answered=dict(d.get("answered", {})),
-            correct_ids=list(d.get("correct_ids", [])),
-            wrong_ids=list(d.get("wrong_ids", [])),
+            selected_ids=[int(x) for x in d.get("selected_ids", [])],
+            presented_ids=[int(x) for x in d.get("presented_ids", [])],
+            answered=answered_norm,
+            correct_ids=[int(x) for x in d.get("correct_ids", [])],
+            wrong_ids=[int(x) for x in d.get("wrong_ids", [])],
             done=bool(d.get("done", False)),
-            last_shown_id=d.get("last_shown_id"),
+            last_shown_id=(int(d["last_shown_id"]) if d.get("last_shown_id") is not None else None),
         )
 
     def to_dict(self) -> dict:
@@ -111,7 +118,8 @@ class ExamSession:
         self._load_or_init_state()
 
     def _load_pool(self) -> List[dict]:
-        with open(self.pool_path, "r", encoding="utf-8") as f: data = json.load(f)
+        with open(self.pool_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         for q in data:
             if isinstance(q.get("id"), str) and q["id"].isdigit():
                 q["id"] = int(q["id"])
@@ -120,17 +128,20 @@ class ExamSession:
     def _load_or_init_state(self) -> None:
         if self.state_path.exists():
             try:
-                with open(self.state_path, "r", encoding="utf-8") as f: d = json.load(f)
+                with open(self.state_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
                 self.stats = Stats.from_dict(d.get("stats", {}))
                 self.current = CurrentExam.from_dict(d.get("current", {}))
                 return
-            except Exception: pass
+            except Exception:
+                pass
         self.stats, self.current = Stats(), CurrentExam()
         self._save_state()
 
     def _save_state(self) -> None:
         out = {"stats": self.stats.to_dict(), "current": self.current.to_dict()}
-        with open(self.state_path, "w", encoding="utf-8") as f: json.dump(out, f, indent=2)
+        with open(self.state_path, "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2)
 
     # --- NEW: state import/export helpers expected by exam_repl.py ---
     def dump_state_base64(self) -> str:
@@ -154,7 +165,8 @@ class ExamSession:
 
     def start_new_exam(self) -> None:
         buckets: Dict[str, List[dict]] = {}
-        for q in self.pool: buckets.setdefault(_group_key(q), []).append(q)
+        for q in self.pool:
+            buckets.setdefault(_group_key(q), []).append(q)
         chosen: List[dict] = [self.rng.choice(arr) for arr in buckets.values()]
         chosen.sort(key=lambda q: (int(q.get("subelement", 999)), str(q.get("group_index")), str(q.get("group_number"))))
         self.current = CurrentExam(selected_ids=[int(q["id"]) for q in chosen], presented_ids=[])
@@ -162,23 +174,30 @@ class ExamSession:
 
     def _q_by_id(self, qid: int) -> dict:
         for q in self.pool:
-            if int(q.get("id")) == int(qid): return q
+            if int(q.get("id")) == int(qid):
+                return q
         raise KeyError(f"Question id {qid} not found")
 
     def _figure_md(self, slug: str) -> str:
         local_path = FIG_LOCAL_DIR / f"{slug}.png"
-        if local_path.exists(): return f"\n![Figure {slug.upper()}](sandbox:{local_path})\n"
+        if local_path.exists():
+            return f"\n![Figure {slug.upper()}](sandbox:{local_path})\n"
         return f"\n![Figure {slug.upper()}]({FIG_BASE_URL}{slug}.png)\n"
 
     def _question_markdown(self, q: dict) -> str:
         qid, qtext = q.get("id"), (q.get("question") or "").strip().replace("\n", " ")
         header, slug = f"**E{q.get('subelement')}{q.get('group_index')}{q.get('group_number','')}** (id {qid})\n", find_figure_slug(qtext)
         fig_md = self._figure_md(slug) if slug else ""
-        return "\n".join([header, qtext + fig_md,
-                         "\nA. " + (q.get("answer_a") or ""),
-                         "\nB. " + (q.get("answer_b") or ""),
-                         "\nC. " + (q.get("answer_c") or ""),
-                         "\nD. " + (q.get("answer_d") or "")])
+        return "\n".join(
+            [
+                header,
+                qtext + fig_md,
+                "\nA. " + (q.get("answer_a") or ""),
+                "\nB. " + (q.get("answer_b") or ""),
+                "\nC. " + (q.get("answer_c") or ""),
+                "\nD. " + (q.get("answer_d") or ""),
+            ]
+        )
 
     def next_question_markdown(self) -> str:
         for qid in self.current.selected_ids:
@@ -190,19 +209,23 @@ class ExamSession:
                 return self._question_markdown(self._q_by_id(qid))
         return "_(All questions have been answered. Call `finalize()`.)_"
 
-    def _correct_letter(self, q: dict) -> str: return str(q.get("answer", "")).strip().upper()[:1]
+    def _correct_letter(self, q: dict) -> str:
+        return str(q.get("answer", "")).strip().upper()[:1]
 
     def answer(self, qid: int, letter: str) -> str:
         letter = str(letter).strip().upper()[:1]
-        if letter not in ANSWER_MAP: return "Please use one of: A, B, C, D."
+        if letter not in ANSWER_MAP:
+            return "Please use one of: A, B, C, D."
         q, correct = self._q_by_id(qid), self._correct_letter(self._q_by_id(qid))
         is_correct = (letter == correct)
         self.current.answered[int(qid)] = {"selected": letter, "correct": is_correct}
         if is_correct:
-            if int(qid) not in self.current.correct_ids: self.current.correct_ids.append(int(qid))
+            if int(qid) not in self.current.correct_ids:
+                self.current.correct_ids.append(int(qid))
             msg = "✅ Correct."
         else:
-            if int(qid) not in self.current.wrong_ids: self.current.wrong_ids.append(int(qid))
+            if int(qid) not in self.current.wrong_ids:
+                self.current.wrong_ids.append(int(qid))
             correct_text = q.get(ANSWER_MAP.get(correct)) or correct
             msg = f"❌ Incorrect. Correct answer: {correct} — {correct_text}"
         self.current.last_shown_id = None  # clear active so next one shows
@@ -210,12 +233,14 @@ class ExamSession:
         return msg
 
     def answer_current(self, letter: str) -> str:
-        if self.current.last_shown_id is None: return "No current question shown. Use `next_question_markdown()` first."
+        if self.current.last_shown_id is None:
+            return "No current question shown. Use `next_question_markdown()` first."
         return self.answer(self.current.last_shown_id, letter)
 
     def finalize(self) -> str:
         total, correct = len(self.current.selected_ids), len(self.current.correct_ids)
-        if total == 0: return "_(No questions in the current exam.)_"
+        if total == 0:
+            return "_(No questions in the current exam.)_"
         pct, passed = round((correct / total) * 100), (len(self.current.correct_ids) / total >= 0.8)
         self.current.done = True
         # Update high-level stats
