@@ -180,8 +180,8 @@ class ExamSession:
 
     def _figure_md(self, slug: str) -> str:
         local_path = FIG_LOCAL_DIR / f"{slug}.png"
-        if local_path.exists():
-            return f"\n![Figure {slug.upper()}](sandbox:{local_path})\n"
+        //if local_path.exists():
+        //    return f"\n![Figure {slug.upper()}](sandbox:{local_path})\n"
         return f"\n![Figure {slug.upper()}]({FIG_BASE_URL}{slug}.png)\n"
 
     def _question_markdown(self, q: dict) -> str:
