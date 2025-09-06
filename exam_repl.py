@@ -52,7 +52,8 @@ def chat_repl(command: str) -> str:
 
     n = re.match(r"^disp ([0-9]*)\s*$", t, re.IGNORECASE)
     if n:
-        d_q = sess._question_markdown(sess._q_by_id(int(n)))
+        q_disp = n.group(1)
+        d_q = sess._question_markdown(sess._q_by_id(int(q_disp)))
         return f"Diplay question:\n\n{d_q}"
 
     m = re.match(r"^([A-Da-d])\s*$", t, re.IGNORECASE)
