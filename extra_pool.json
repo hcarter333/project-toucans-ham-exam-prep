@@ -1977,15 +1977,15 @@
   },
   {
     "id": 153,
-    "question": "What is the effect of  chordal- hop propagation?",
+    "question": "What is the effect of  chordal-hop propagation?",
     "class": "E",
     "subelement": "3",
     "group_index": "B",
     "group_number": "10",
     "answer": "A",
-    "answer_a": "The signal experiences less loss compared to multi -hop propagation, which uses Earth as a reflector",
-    "answer_b": "The MUF for chordal- hop propagation is much lower than for normal skip propagation",
-    "answer_c": "Atmospheric noise is reduced in the direction of chordal -hop pro pagation",
+    "answer_a": "The signal experiences less loss compared to multi-hop propagation, which uses Earth as a reflector",
+    "answer_b": "The MUF for chordal-hop propagation is much lower than for normal skip propagation",
+    "answer_c": "Atmospheric noise is reduced in the direction of chordal-hop pro pagation",
     "answer_d": "Signals travel faster along ionospheric chords"
   },
   {
