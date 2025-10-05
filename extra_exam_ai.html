@@ -40,23 +40,37 @@
     #groupDetails { margin-top: 10px; }
     .sub-section { margin-top: 12px; }
 
-    /* --- AI help UI --- */
-    .ai-help-row { display:flex; gap:.5rem; align-items:center; margin-top:.5rem; }
-    .ai-help-input { flex:1; padding:.5rem .6rem; border:1px solid #ccc; border-radius:.5rem; }
-    .ai-help-btn { padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem; background:#0066cc; color:#fff; cursor:pointer; }
-    .ai-help-btn:hover { background:#0055aa; }
+/* --- Per-question AI help UI --- */
+.ai-help-row { display:flex; gap:.5rem; align-items:center; margin-top:.5rem; }
+.ai-follow-input {
+  flex:1; min-width:200px; padding:.5rem .6rem;
+  border:1px solid #ccc; border-radius:.5rem;
+}
+.ai-help-btn {
+  padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem;
+  background:#0066cc; color:#fff; cursor:pointer;
+}
+.ai-help-btn:hover { background:#0055aa; }
 
-    .ai-panel {
-      display:none; margin-top:16px; border:1px solid #ddd; border-radius:10px;
-      background:#fafafa; padding:10px; resize:vertical; overflow:auto;
-      min-height:140px; max-height:65vh;
-    }
-    .ai-panel-header { font-weight:600; margin-bottom:6px; display:flex; gap:10px; align-items:center; }
-    .ai-log { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .ai-log .qline { color:#0b5; }
-    .ai-log .aline { color:#333; }
+.ai-box {
+  margin-top:.5rem; border:1px solid #ddd; border-radius:10px;
+  background:#fafafa; padding:8px;
+}
+.ai-log {
+  width:100%;
+  height:180px;            /* initial height */
+  min-height:140px;
+  max-height:65vh;
+  resize:vertical;         /* user can drag to resize */
+  overflow:auto;
+  white-space:pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
   </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <body>
   <h1>Extra Class Practice Exam</h1>
 
@@ -88,11 +102,6 @@
     </details>
   </div>
 
-  <!-- Global, resizable AI Answers panel -->
-  <div id="aiPanel" class="ai-panel">
-    <div class="ai-panel-header">AI Answers <small id="aiPanelSub" class="muted">context-aware help per question</small></div>
-    <div id="aiLog" class="ai-log"></div>
-  </div>
 
   <script>
     /* =========================
@@ -117,7 +126,12 @@ If no evidence is found, respond with NOT_FOUND.`
  Your tone should be  calm and encouraging. This is not big deal, it just requires study. 
  People will ask you to help them understand various questions from the exam. Please answer 
  assuming they are not engineers. Give answers that are clear and as simple as possible. 
- Ask lots of follow up questions. NEVER USE THE PHRASE DON'T WORRY.`
+ Ask lots of follow up questions. NEVER USE THE PHRASE DON'T WORRY.
+ Rules:
+- DO NOT restate or quote the question.
+- Start with the correct choice letter and text on one line.
+- If answering a follow on question, do not repeat the correct answer or the exam question.
+- Return Markdown.`
 
     function getAPIKey() {
       let apiKey = localStorage.getItem('openai_api_key');
@@ -192,11 +206,11 @@ If no evidence is found, respond with NOT_FOUND.`
 
     // Per-question conversation state (persisted)
     function loadThreads() {
-      try { return JSON.parse(localStorage.getItem('ai_threads') || '{}'); }
+      try { return JSON.parse(localStorage.getItem('ai_threads2') || '{}'); }
       catch { return {}; }
     }
     function saveThreads(obj) {
-      localStorage.setItem('ai_threads', JSON.stringify(obj));
+      localStorage.setItem('ai_threads2', JSON.stringify(obj));
     }
     let AI_THREADS = loadThreads(); // { [qid]: { history:[{role,content}], panel:"" } }
 
@@ -208,13 +222,13 @@ If no evidence is found, respond with NOT_FOUND.`
       if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "" };
 
       // Compose system + history + user
-      const sys = `${system_prompt}\n\nPlease help me with id ${qid}.`;
+      const sys = `${system_prompt}`;
       const messages = [{ role: 'system', content: sys }];
       for (const m of AI_THREADS[qid].history) messages.push(m);
 
       const userMsg = (followup && followup.trim()) ?
           followup.trim() :
-          "Explain the question, give the correct choice and a short why-not for others.";
+          `Please help me with id ${qid}.`;
       messages.push({ role: 'user', content: userMsg });
 
       const resp = await openai('/responses', {
@@ -564,51 +578,79 @@ If no evidence is found, respond with NOT_FOUND.`
         card.appendChild(controls);
         card.appendChild(result);
 
-        /* ---------- Inject AI Help controls ---------- */
-        const aiRow = document.createElement('div');
-        aiRow.className = 'ai-help-row';
-        aiRow.innerHTML = `
-          <input class="ai-help-input" type="text" placeholder="Follow-up for Q#${q.id} (optional)" />
-          <button class="ai-help-btn" type="button">AI help</button>
-        `;
-        card.appendChild(aiRow);
+// --------- Per-question AI help UI (hidden until first click) ---------
+const aiRow = document.createElement('div');
+aiRow.className = 'ai-help-row';
 
-        const followupInput = aiRow.querySelector('.ai-help-input');
-        const helpBtn = aiRow.querySelector('.ai-help-btn');
+// follow-up input is created now but hidden until first AI help click
+const followupInput = document.createElement('input');
+followupInput.type = 'text';
+followupInput.placeholder = 'Ask a follow-up (optional)…';
+followupInput.className = 'ai-follow-input';
+followupInput.hidden = true;  // <- per your requirement
 
-        // If we already have panel text for this qid, show panel and seed it
-        if (AI_THREADS[q.id]?.panel) {
-          aiPanel.style.display = 'block';
-          aiLog.textContent = AI_THREADS[q.id].panel;
-        }
+// AI help button (always visible)
+const helpBtn = document.createElement('button');
+helpBtn.type = 'button';
+helpBtn.className = 'ai-help-btn';
+helpBtn.textContent = 'AI help';
 
-        helpBtn.addEventListener('click', async () => {
-          try {
-            aiPanel.style.display = 'block';
+// resizable answer box for this question (hidden by default)
+const aiBox = document.createElement('div');
+aiBox.className = 'ai-box';
+aiBox.hidden = true;
 
-            // Build follow-up per spec
-            const userText = followupInput.value.trim();
-            const composed = userText
-              ? `Please help me with id ${q.id}. ${userText}`
-              : `Please help me with id ${q.id}.`;
+const aiLog = document.createElement('textarea');
+aiLog.className = 'ai-log';
+aiLog.readOnly = true;
 
-            const { userMsg, answer, panelText } = await (async () => {
-              const r = await askAI({ qid: q.id, followup: composed });
-              return { userMsg: r.userMsg, answer: r.answer, panelText: r.panelText };
-            })();
+// If we already have history for this q.id, preload it (but keep hidden until first click)
+if (AI_THREADS[q.id] && Array.isArray(AI_THREADS[q.id]) && AI_THREADS[q.id].length) {
+  aiLog.value = AI_THREADS[q.id].join('\n') + '\n';
+}
 
-            // Update global panel
-            aiLog.textContent = panelText;
+aiBox.appendChild(aiLog);
 
-            // Append Q/A into the input (scratchpad)
-            followupInput.value = (followupInput.value ? followupInput.value + "\n" : "") +
-                                  `Q: ${userMsg}\nA: ${answer}\n`;
-          } catch (err) {
-            console.error(err);
-            alert(err.message || 'AI help failed.');
-          }
-        });
-        /* ---------- end AI Help controls ---------- */
+// Click handler using YOUR askAI()
+helpBtn.addEventListener('click', async () => {
+  try {
+    // On first use, reveal UI
+    if (aiBox.hidden) aiBox.hidden = false;
+    if (followupInput.hidden) followupInput.hidden = false;
+
+    // Build the follow-up as specified
+    const extra = followupInput.value.trim();
+    const followup = extra
+      ? `${extra}`
+      : ``;
+
+    // Call your existing helper (must return { userMsg, answer })
+    const { userMsg, answer, panelText } = await askAI({ qid: q.id, followup });
+
+    // Append Q/A to this question's textarea (multiline)
+    //const block = `Q: ${userMsg}\nA: ${answer}\n`;
+    //aiLog.value = (aiLog.value || '') + panelText;
+    //aiLog.value = panetext;
+    const block = `${userMsg}\n${answer}\n\n`;
+    aiLog.value = (aiLog.value || '') + block;
+
+
+    // Keep follow-up box visible but empty
+    followupInput.value = '';
+  } catch (err) {
+    console.error(err);
+    alert(err.message || 'AI help failed.');
+  }
+});
+
+// Put input to the LEFT of the button, as requested
+aiRow.appendChild(followupInput);
+aiRow.appendChild(helpBtn);
+
+// Insert into the card
+card.appendChild(aiRow);
+card.appendChild(aiBox);
+// --------- end per-question AI help UI ---------
 
         document.getElementById('exam').appendChild(card);
       }
