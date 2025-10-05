@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Extra Class Practice Exam + AI Help</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body { margin: 2rem; }
+    h1 { margin-top: 0; }
+    .toolbar { display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;}
+    .btn { cursor:pointer; padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem; background:#f7f7f7; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .muted { color:#777; font-size:.9rem; }
+    .card { border:1px solid #e5e5e5; border-radius:12px; padding:1rem; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+    .qid { font-weight:600; color:#555; margin-bottom:.25rem; }
+    .qtext { margin:.25rem 0 .5rem; line-height:1.5; }
+    .figure { margin:.25rem 0 .75rem; }
+    .figure img { max-width:100%; height:auto; border:1px solid #eee; border-radius:8px; }
+    .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    select { padding:.4rem .5rem; max-width: 100%; white-space: normal; }
+
+    .result { margin-top:.5rem; font-weight:600; }
+    .correct { color:#0a7b34; }
+    .incorrect { color:#b00020; }
+
+    #summary { margin-top:2rem; padding:1rem; border:2px dashed #ddd; border-radius:12px; background:#fafafa; }
+
+    #charts { margin-top:2rem; }
+    .section-title { margin-top:2rem; margin-bottom:.5rem; }
+    .charts-note { color:#555; font-size:.9rem; margin-bottom:.5rem; }
+
+    .grid10 { display:grid; grid-template-columns: repeat(10, minmax(80px, 1fr)); gap: 8px; align-items:start; }
+    .chart-card { border:1px solid #eee; border-radius:12px; padding:8px; }
+    .chart-title-row { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:6px; }
+    .chart-title { font-weight:600; font-size:.9rem; margin:0; }
+    .caret-btn { cursor:pointer; border:1px solid #ddd; background:#fafafa; border-radius:6px; padding:2px 6px; line-height:1; }
+    .caret-btn[hidden] { display:none; }
+    #groupDetails { margin-top: 10px; }
+    .sub-section { margin-top: 12px; }
+
+    /* --- AI help UI --- */
+    .ai-help-row { display:flex; gap:.5rem; align-items:center; margin-top:.5rem; }
+    .ai-help-input { flex:1; padding:.5rem .6rem; border:1px solid #ccc; border-radius:.5rem; }
+    .ai-help-btn { padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem; background:#0066cc; color:#fff; cursor:pointer; }
+    .ai-help-btn:hover { background:#0055aa; }
+
+    .ai-panel {
+      display:none; margin-top:16px; border:1px solid #ddd; border-radius:10px;
+      background:#fafafa; padding:10px; resize:vertical; overflow:auto;
+      min-height:140px; max-height:65vh;
+    }
+    .ai-panel-header { font-weight:600; margin-bottom:6px; display:flex; gap:10px; align-items:center; }
+    .ai-log { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .ai-log .qline { color:#0b5; }
+    .ai-log .aline { color:#333; }
+  </style>
+</head>
+<body>
+  <h1>Extra Class Practice Exam</h1>
+
+  <div class="toolbar">
+    <button id="newExamBtn" class="btn" disabled>New exam</button>
+  </div>
+
+  <div id="charts">
+    <h2 class="section-title">Performance Dashboard</h2>
+    <div class="charts-note">Cumulative charts and score history (persisted via <code>#c=...</code> in the URL).</div>
+
+    <div class="chart-card" style="margin-bottom:12px;">
+      <canvas id="scoresOverTime" height="140"></canvas>
+    </div>
+
+    <h3 class="section-title">Correct vs Wrong by Subelement</h3>
+    <div id="subelementGrid" class="grid10"></div>
+    <div id="groupDetails"></div>
+  </div>
+
+  <div id="exam"></div>
+
+  <div id="summary" hidden>
+    <h2>Your Score</h2>
+    <p id="scoreLine"></p>
+    <details>
+      <summary>What was tracked? (this test)</summary>
+      <pre id="tracking" style="white-space:pre-wrap;"></pre>
+    </details>
+  </div>
+
+  <!-- Global, resizable AI Answers panel -->
+  <div id="aiPanel" class="ai-panel">
+    <div class="ai-panel-header">AI Answers <small id="aiPanelSub" class="muted">context-aware help per question</small></div>
+    <div id="aiLog" class="ai-log"></div>
+  </div>
+
+  <script>
+    /* =========================
+       OpenAI Retrieval Plumbing
+    ========================= */
+    const BASE = "https://api.openai.com/v1";
+    const QUESTION_POOL_URL =
+      "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/extra_pool.json";
+
+    // System prompt required by spec
+/*    const system_prompt =
+`You are a careful ham-radio tutor. Use the File Search knowledge base (extra_pool.json).
+When a question id is provided, locate that record and:
+1) State the correct letter and the correct text.
+2) Explain why it's correct, step-by-step.
+3) Briefly say why the other options are incorrect.
+If no evidence is found, respond with NOT_FOUND.`
+*/
+    const system_prompt = 
+`You are a ham radio license exam tutor in the United States. For now, you work 
+ on the extra class exam. You have the question pool available via vector store. 
+ Your tone should be  calm and encouraging. This is not big deal, it just requires study. 
+ People will ask you to help them understand various questions from the exam. Please answer 
+ assuming they are not engineers. Give answers that are clear and as simple as possible. 
+ Ask lots of follow up questions. NEVER USE THE PHRASE DON'T WORRY.`
+
+    function getAPIKey() {
+      let apiKey = localStorage.getItem('openai_api_key');
+      if (!apiKey) {
+        apiKey = prompt('Enter your OpenAI API Key:');
+        if (apiKey) localStorage.setItem('openai_api_key', apiKey);
+      }
+      return apiKey;
+    }
+
+    async function openai(path, { method = 'POST', headers = {}, body } = {}) {
+      const apiKey = getAPIKey();
+      if (!apiKey) throw new Error('Missing OpenAI API key.');
+
+      const isForm = (body instanceof FormData);
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        headers: isForm
+          ? { 'Authorization': `Bearer ${apiKey}`, ...headers }
+          : { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...headers },
+        body: isForm ? body : (body ? JSON.stringify(body) : undefined),
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(`OpenAI ${path} failed: ${res.status} ${res.statusText} :: ${text}`);
+      return text ? JSON.parse(text) : {};
+    }
+
+    async function ensureVectorStore(jsonData) {
+      let vsId = localStorage.getItem('vector_store_id');
+      if (vsId) return vsId;
+
+      const vs = await openai('/vector_stores', { body: { name: 'Ham Exam Pool (User-Owned)' } });
+      vsId = vs.id;
+
+      const form = new FormData();
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      form.append('file', blob, 'extra_pool.json');
+      form.append('purpose', 'assistants');
+      const file = await openai('/files', { body: form });
+
+      await openai(`/vector_stores/${vsId}/files`, { body: { file_id: file.id } });
+      await waitForFileReady(vsId, file.id);
+
+      localStorage.setItem('vector_store_id', vsId);
+      return vsId;
+    }
+
+    async function waitForFileReady(vectorStoreId, fileId, timeoutMs = 30000) {
+      const start = Date.now();
+      while (true) {
+        const status = await openai(`/vector_stores/${vectorStoreId}/files/${fileId}`, { method: 'GET' });
+        if (status.status === 'completed') return;
+        if (status.status === 'failed') throw new Error('Vector store indexing failed');
+        if (Date.now() - start > timeoutMs) throw new Error('Timed out waiting for indexing');
+        await new Promise(r => setTimeout(r, 900));
+      }
+    }
+
+    // Extract assistant text from Responses payload
+    function extractText(resp) {
+      if (resp && Array.isArray(resp.output)) {
+        for (const msg of resp.output) {
+          if (msg.type === 'message' && msg.status === 'completed' && Array.isArray(msg.content)) {
+            const hit = msg.content.find(c => c.type === 'output_text' && typeof c.text === 'string');
+            if (hit) return hit.text;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Per-question conversation state (persisted)
+    function loadThreads() {
+      try { return JSON.parse(localStorage.getItem('ai_threads') || '{}'); }
+      catch { return {}; }
+    }
+    function saveThreads(obj) {
+      localStorage.setItem('ai_threads', JSON.stringify(obj));
+    }
+    let AI_THREADS = loadThreads(); // { [qid]: { history:[{role,content}], panel:"" } }
+
+    // Send turn via Responses + File Search, using per-question thread
+    async function askAI({ qid, followup }) {
+      const vsId = localStorage.getItem('vector_store_id');
+      if (!vsId) throw new Error('No vector_store_id found.');
+
+      if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "" };
+
+      // Compose system + history + user
+      const sys = `${system_prompt}\n\nPlease help me with id ${qid}.`;
+      const messages = [{ role: 'system', content: sys }];
+      for (const m of AI_THREADS[qid].history) messages.push(m);
+
+      const userMsg = (followup && followup.trim()) ?
+          followup.trim() :
+          "Explain the question, give the correct choice and a short why-not for others.";
+      messages.push({ role: 'user', content: userMsg });
+
+      const resp = await openai('/responses', {
+        body: {
+          model: 'gpt-4.1-mini',
+          input: messages,
+          tools: [{ type: 'file_search', vector_store_ids: [vsId] }]
+        }
+      });
+
+      const answer = extractText(resp) || "(no answer text)";
+
+      // update thread + panel
+      AI_THREADS[qid].history.push({ role:'user', content:userMsg });
+      AI_THREADS[qid].history.push({ role:'assistant', content:answer });
+
+      const block = `Q#${qid} — ${userMsg}\n${answer}\n`;
+      AI_THREADS[qid].panel = (AI_THREADS[qid].panel ? AI_THREADS[qid].panel + "\n" : "") + block;
+      saveThreads(AI_THREADS);
+
+      return { userMsg, answer, panelText: AI_THREADS[qid].panel };
+    }
+
+    /* =========================
+       Exam App (your code, + AI UI)
+    ========================= */
+    const FIG_BASE_URL = "https://raw.githubusercontent.com/hcarter333/project-toucans-ham-exam-prep/refs/heads/main/img/";
+    function groupKey(q) { return `E${q.subelement}${q.group_index}`; }
+    function subKey(q)   { return `E${q.subelement}`; }
+    function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function letterToField(letter) {
+      const map = { A: "answer_a", B: "answer_b", C: "answer_c", D: "answer_d" };
+      return map[letter] || null;
+    }
+    function sanitize(text) { return (text ?? "").toString().replace(/\s+/g, " ").trim(); }
+    const nowIso = () => new Date().toISOString();
+
+    function findFigureSlug(text) {
+      if (!text) return null;
+      const re = /Figure\s+([A-Za-z])\s*([0-9]+)\s*[-–—]\s*([0-9]+)/i;
+      const m = text.match(re);
+      if (!m) return null;
+      const letter = m[1].toLowerCase();
+      const major  = m[2];
+      const minor  = m[3];
+      return `${letter}${major}-${minor}`;
+    }
+
+    function encodeState(obj) {
+      const json = JSON.stringify(obj);
+      const b64 = btoa(unescape(encodeURIComponent(json)));
+      return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    function decodeState(s) {
+      try {
+        const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
+        const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+        const json = decodeURIComponent(escape(atob(b64 + pad)));
+        return JSON.parse(json);
+      } catch { return null; }
+    }
+
+    let scoresChart = null;
+    const subelementCharts = [];
+    const groupCharts = [];
+    let currentExpandedSub = null;
+
+    function destroyCharts(arr) { while (arr.length) { try { arr.pop().destroy(); } catch {} } }
+    function clearCharts() {
+      if (scoresChart) { try { scoresChart.destroy(); } catch {} scoresChart = null; }
+      destroyCharts(subelementCharts);
+      destroyCharts(groupCharts);
+      document.getElementById('subelementGrid').innerHTML = '';
+      document.getElementById('groupDetails').innerHTML = '';
+      currentExpandedSub = null;
+    }
+
+    function renderScoresOverTime(history) {
+      const ctx = document.getElementById('scoresOverTime').getContext('2d');
+      const labels = history.map(h => new Date(h.ts).toLocaleString());
+      const data   = history.map(h => h.scorePct);
+      scoresChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Test Score (%)', data }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+    }
+
+    function createStackedBar(canvas, correct, wrong) {
+      return new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: [''],
+          datasets: [
+            { label: 'Correct', data: [correct], stack: 's', backgroundColor: '#0a7b34' },
+            { label: 'Wrong',   data: [wrong],   stack: 's', backgroundColor: '#b00020' }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display:false } },
+          scales: {
+            x: { stacked:true, ticks:{display:false}, grid:{display:false}, border:{display:false} },
+            y: { stacked:true, beginAtZero:true, ticks:{display:false}, grid:{display:false}, border:{display:false} }
+          }
+        }
+      });
+    }
+
+    function renderSubelementStacks(subStats, groupsStats) {
+      const grid = document.getElementById('subelementGrid');
+      grid.innerHTML = '';
+      destroyCharts(subelementCharts);
+
+      const subs = Object.keys(subStats).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+      subs.forEach(sub => {
+        const {correct=0, wrong=0} = subStats[sub] || {};
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+
+        const row = document.createElement('div');
+        row.className = 'chart-title-row';
+
+        const title = document.createElement('div');
+        title.className = 'chart-title';
+        title.textContent = `${sub}`;
+
+        const caret = document.createElement('button');
+        caret.className = 'caret-btn';
+        caret.innerHTML = (currentExpandedSub === sub) ? '&#9650;' : '&#9660;';
+
+        const hasGroups = !!(groupsStats && groupsStats[sub] && Object.keys(groupsStats[sub]).length);
+        if (!hasGroups) caret.hidden = true;
+
+        caret.addEventListener('click', () => {
+          if (currentExpandedSub === sub) {
+            currentExpandedSub = null;
+            caret.innerHTML = '&#9660;';
+            document.getElementById('groupDetails').innerHTML = '';
+            destroyCharts(groupCharts);
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9660;'; });
+          } else {
+            currentExpandedSub = sub;
+            Array.from(document.querySelectorAll('.caret-btn')).forEach(btn => { if (!btn.hidden) btn.innerHTML = '&#9660;'; });
+            caret.innerHTML = '&#9650;';
+            renderGroupStacksForSub(sub);
+          }
+        });
+
+        row.appendChild(title);
+        row.appendChild(caret);
+        card.appendChild(row);
+
+        const canvas = document.createElement('canvas');
+        canvas.height = 110;
+        card.appendChild(canvas);
+        grid.appendChild(card);
+
+        const chart = createStackedBar(canvas, correct, wrong);
+        subelementCharts.push(chart);
+      });
+    }
+
+    function renderGroupStacksForSub(sub) {
+      const holder = document.getElementById('groupDetails');
+      holder.innerHTML = '';
+      destroyCharts(groupCharts);
+
+      const section = document.createElement('section');
+      section.className = 'sub-section';
+
+      const h = document.createElement('h4');
+      h.textContent = `Groups in ${sub}`;
+      section.appendChild(h);
+
+      const grid = document.createElement('div');
+      grid.className = 'grid10';
+
+      const groupsObj = state.stats.groups[sub] || {};
+      const groups = Object.keys(groupsObj).sort();
+
+      groups.forEach(g => {
+        const {correct=0, wrong=0} = groupsObj[g] || {};
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+
+        const row = document.createElement('div');
+        row.className = 'chart-title-row';
+
+        const title = document.createElement('div');
+        title.className = 'chart-title';
+        title.textContent = `${sub}${g}`;
+
+        row.appendChild(title);
+        card.appendChild(row);
+
+        const canvas = document.createElement('canvas');
+        canvas.height = 110;
+        card.appendChild(canvas);
+        grid.appendChild(card);
+
+        const chart = createStackedBar(canvas, correct, wrong);
+        groupCharts.push(chart);
+      });
+
+      section.appendChild(grid);
+      holder.appendChild(section);
+    }
+
+    function renderAllCharts(stats) {
+      clearCharts();
+      renderScoresOverTime(stats.history || []);
+      renderSubelementStacks(stats.subelements || {}, stats.groups || {});
+    }
+
+    const state = {
+      all: [],
+      selected: [],
+      answered: new Map(),
+      presentedIds: [],
+      correctIds: new Set(),
+      wrongIds: new Set(),
+      done: false,
+      stats: { history: [], subelements: {}, groups: {} }
+    };
+
+    async function loadPool() {
+      const res = await fetch(QUESTION_POOL_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    function buildExam(questions) {
+      const buckets = new Map();
+      for (const q of questions) {
+        const key = groupKey(q);
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(q);
+      }
+      const chosen = [];
+      for (const [, arr] of buckets.entries()) chosen.push(pickRandom(arr));
+      chosen.sort((a,b) => {
+        const an = parseInt(a.subelement,10), bn = parseInt(b.subelement,10);
+        if (an !== bn) return an - bn;
+        return a.group_index.localeCompare(b.group_index);
+      });
+      return chosen;
+    }
+
+    const aiPanel = document.getElementById('aiPanel');
+    const aiLog   = document.getElementById('aiLog');
+
+    function renderExam() {
+      const container = document.getElementById('exam');
+      container.innerHTML = "";
+      state.answered.clear();
+      state.correctIds.clear();
+      state.wrongIds.clear();
+      state.done = false;
+      state.presentedIds = state.selected.map(q => q.id);
+
+      for (const q of state.selected) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const header = document.createElement('div');
+        header.className = 'qid';
+        header.textContent = `E${q.subelement}${q.group_index}${q.group_number} (id ${q.id})`;
+        card.appendChild(header);
+
+        const qtext = document.createElement('div');
+        qtext.className = 'qtext';
+        const qTextStr = sanitize(q.question);
+        qtext.textContent = qTextStr;
+        card.appendChild(qtext);
+
+        const slug = findFigureSlug(qTextStr);
+        if (slug) {
+          const figDiv = document.createElement('div');
+          figDiv.className = 'figure';
+          const img = document.createElement('img');
+          img.loading = 'lazy';
+          img.alt = `Figure ${slug.toUpperCase()}`;
+          img.src = FIG_BASE_URL + `${slug}.png`;
+          img.onerror = () => { figDiv.remove(); };
+          figDiv.appendChild(img);
+          card.appendChild(figDiv);
+        }
+
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+
+        const select = document.createElement('select');
+        select.innerHTML = `<option value="">-- choose an answer --</option>`;
+        ['A','B','C','D'].forEach(letter => {
+          const field = letterToField(letter);
+          const txt = sanitize(q[field]);
+          if (!txt) return;
+          const opt = document.createElement('option');
+          opt.value = letter;
+          opt.textContent = `${letter}. ${txt}`;
+          select.appendChild(opt);
+        });
+
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = 'Submit answer';
+
+        const result = document.createElement('div');
+        result.className = 'result';
+
+        btn.addEventListener('click', () => {
+          if (!select.value) { alert('Please choose an answer first.'); return; }
+          if (select.disabled) return;
+
+          const chosenLetter = select.value;
+          const correctLetter = (q.answer || '').trim().toUpperCase();
+          const isCorrect = chosenLetter === correctLetter;
+
+          state.answered.set(q.id, { selected: chosenLetter, correct: isCorrect });
+
+          const correctField = letterToField(correctLetter);
+          const correctText = sanitize(correctField ? q[correctField] : "");
+          if (isCorrect) {
+            result.textContent = 'Correct answer';
+            result.classList.remove('incorrect');
+            result.classList.add('correct');
+            state.correctIds.add(q.id);
+          } else {
+            result.textContent = `Incorrect. The correct answer was: ${correctText || correctLetter}`;
+            result.classList.remove('correct');
+            result.classList.add('incorrect');
+            state.wrongIds.add(q.id);
+          }
+
+          select.disabled = true;
+          btn.disabled = true;
+
+          if (state.answered.size === state.selected.length && !state.done) {
+            state.done = true;
+            finalizeTestAndRender();
+          }
+        });
+
+        controls.appendChild(select);
+        controls.appendChild(btn);
+        card.appendChild(controls);
+        card.appendChild(result);
+
+        /* ---------- Inject AI Help controls ---------- */
+        const aiRow = document.createElement('div');
+        aiRow.className = 'ai-help-row';
+        aiRow.innerHTML = `
+          <input class="ai-help-input" type="text" placeholder="Follow-up for Q#${q.id} (optional)" />
+          <button class="ai-help-btn" type="button">AI help</button>
+        `;
+        card.appendChild(aiRow);
+
+        const followupInput = aiRow.querySelector('.ai-help-input');
+        const helpBtn = aiRow.querySelector('.ai-help-btn');
+
+        // If we already have panel text for this qid, show panel and seed it
+        if (AI_THREADS[q.id]?.panel) {
+          aiPanel.style.display = 'block';
+          aiLog.textContent = AI_THREADS[q.id].panel;
+        }
+
+        helpBtn.addEventListener('click', async () => {
+          try {
+            aiPanel.style.display = 'block';
+
+            // Build follow-up per spec
+            const userText = followupInput.value.trim();
+            const composed = userText
+              ? `Please help me with id ${q.id}. ${userText}`
+              : `Please help me with id ${q.id}.`;
+
+            const { userMsg, answer, panelText } = await (async () => {
+              const r = await askAI({ qid: q.id, followup: composed });
+              return { userMsg: r.userMsg, answer: r.answer, panelText: r.panelText };
+            })();
+
+            // Update global panel
+            aiLog.textContent = panelText;
+
+            // Append Q/A into the input (scratchpad)
+            followupInput.value = (followupInput.value ? followupInput.value + "\n" : "") +
+                                  `Q: ${userMsg}\nA: ${answer}\n`;
+          } catch (err) {
+            console.error(err);
+            alert(err.message || 'AI help failed.');
+          }
+        });
+        /* ---------- end AI Help controls ---------- */
+
+        document.getElementById('exam').appendChild(card);
+      }
+    }
+
+    function finalizeTestAndRender() {
+      const total = state.selected.length;
+      const correct = state.correctIds.size;
+      const pct = Math.round((correct / total) * 100);
+      const pass = pct >= 80;
+
+      const summary = document.getElementById('summary');
+      const scoreLine = document.getElementById('scoreLine');
+      scoreLine.textContent = pass
+        ? `You passed with ${pct}% (${correct}/${total} correct).`
+        : `You failed with ${pct}% (${pct}%: ${correct}/${total} correct).`;
+
+      const tracking = {
+        presented_question_ids: state.presentedIds,
+        correct_question_ids: Array.from(state.correctIds),
+        wrong_question_ids: Array.from(state.wrongIds)
+      };
+      document.getElementById('tracking').textContent = JSON.stringify(tracking, null, 2);
+      summary.hidden = false;
+
+      accumulateStatsFromCurrentTest();
+      state.stats.history.push({ ts: nowIso(), scorePct: pct });
+
+      renderAllCharts(state.stats);
+      document.getElementById('newExamBtn').disabled = false;
+      window.scrollTo({ top: document.getElementById('charts').offsetTop, behavior: 'smooth' });
+    }
+
+    function accumulateStatsFromCurrentTest() {
+      for (const q of state.selected) {
+        const keySub = `E${q.subelement}`;
+        const keyGrp = q.group_index;
+        const wasCorrect = state.correctIds.has(q.id);
+
+        if (!state.stats.subelements[keySub]) state.stats.subelements[keySub] = { correct:0, wrong:0 };
+        state.stats.subelements[keySub][wasCorrect ? 'correct':'wrong']++;
+
+        if (!state.stats.groups[keySub]) state.stats.groups[keySub] = {};
+        if (!state.stats.groups[keySub][keyGrp]) state.stats.groups[keySub][keyGrp] = { correct:0, wrong:0 };
+        state.stats.groups[keySub][keyGrp][wasCorrect ? 'correct':'wrong']++;
+      }
+    }
+
+    function startNewExam(questions) {
+      state.selected = buildExam(questions);
+      document.getElementById('summary').hidden = true;
+      renderExam();
+    }
+
+    function updateHashWithStats() {
+      const encoded = encodeState(state.stats);
+      const url = location.origin + location.pathname + '#c=' + encoded;
+      location.assign(url);
+    }
+    function restoreStatsFromHash() {
+      const m = location.hash.match(/^#c=([^&]+)/);
+      if (!m) return false;
+      const data = decodeState(m[1]);
+      if (!data) return false;
+      state.stats.history     = Array.isArray(data.history) ? data.history : [];
+      state.stats.subelements = typeof data.subelements === 'object' && data.subelements ? data.subelements : {};
+      state.stats.groups      = typeof data.groups === 'object' && data.groups ? data.groups : {};
+      renderAllCharts(state.stats);
+      return true;
+    }
+
+    document.getElementById('newExamBtn').addEventListener('click', () => {
+      updateHashWithStats();
+      if (state.all.length) startNewExam(state.all);
+    });
+
+    restoreStatsFromHash();
+
+    /* =========================
+       Init: load pool, ensure vector store, render
+    ========================= */
+    async function init() {
+      try {
+        const pool = await loadPool();
+        state.all = pool;
+        // Ensure the vector store exists & is indexed (user-owned)
+        await ensureVectorStore(pool);
+        startNewExam(state.all);
+        document.getElementById('newExamBtn').disabled = false;
+      } catch (e) {
+        console.error("Init failed:", e);
+        alert("Initialization failed: " + e.message);
+      }
+    }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
