@@ -225,7 +225,9 @@ If no evidence is found, respond with NOT_FOUND.`
 const system_prompt = `
 You are a ham radio license exam tutor for the U.S. Extra Class exam. 
 Be calm, clear, and encouraging. Assume the student is not an engineer. 
-Ask gentle follow-up questions. NEVER USE THE PHRASE "DON'T WORRY".
+Ask gentle follow-up questions. When an exam question involves math 
+or numbers, always work out the math in a step by step fashion, explaining 
+why each step wwas taken. NEVER USE THE PHRASE "DON'T WORRY".
 
 When giving equations or math expressions:
 
@@ -238,6 +240,15 @@ FORMAT RULES (CRITICAL)
 -----------------------
 
 Return Markdown only—no HTML or explanations of formatting.
+
+RETRIEVAL POLICY
+- If the user gives an explicit ID like “id 598”, search by metadata {id:598}
+- Prefer exact-key matches over fuzzy text.
+- Limit retrieval to ≤ 5 chunks, ≤ 1,500 total tokens.
+- If no key is present, build a compact keyword query (≤ 12 words) using:
+  [ class, subelement, group_index+group_number, core nouns/verbs, dates ]
+- Examples of good queries:
+  • "id:598
 `;
 
 
@@ -336,14 +347,16 @@ Return Markdown only—no HTML or explanations of formatting.
 
       const userMsg = (followup && followup.trim()) ?
           followup.trim() :
-          `Please help me with id ${qid}.`;
+          `Please help me with ${getQuestionJson(qid)}`;
       messages.push({ role: 'user', content: userMsg });
 
       const resp = await openai('/responses', {
         body: {
           model: 'gpt-4.1-mini',
           input: messages,
-          tools: [{ type: 'file_search', vector_store_ids: [vsId] }]
+          prompt_cache_key: "extra-class-tutor-v3",
+          //tools: [{ type: 'file_search', vector_store_ids: [vsId] }],
+          truncation: "auto"
         }
       });
 
@@ -737,32 +750,16 @@ helpBtn.addEventListener('click', async () => {
 
     // Build ONLY the new turn’s markdown
     const rawBlock = `${userMsg}\n\n${answer}\n\n---\n`;
-    //const tmath = normalizeBracketMath(`${userMsg}\n\n${answer}\n\n---\n`);
-
-    // Convert [ ... ] -> \[ ... \] so MathJax can render
-    //const withMath = normalizeBracketMath(rawBlock);
-
-// A) remove accidental 4+ space indents (stop Markdown code blocks)
-//const deindented = deindentForMarkdown(rawBlock);
-
-// B) normalize math delimiters: (...) → \(...\), [...] → \[...\]
-//const withMath = normalizeInlineMath(deindented);
-//console.log(rawBlock);
-//const withMath = prepareMdForMathJax(rawBlock);
-const withMath = rawBlock;
-console.log(withMath);
-// C) Markdown → HTML → sanitize
-//const html = DOMPurify.sanitize(marked.parse(withMath));
-
-    // Markdown -> HTML -> sanitize
-    const newHTML = DOMPurify.sanitize(marked.parse(withMath));
+    //const withMath = rawBlock;
+    // C) Markdown → HTML → sanitize
+    const newHTML = DOMPurify.sanitize(marked.parse(rawBlock));
 
     const turn = document.createElement('div');
     turn.className = 'tex2jax_process'; // ensure MathJax processes this node
     turn.innerHTML = newHTML;
     aiLog.appendChild(turn);
 
-    console.log(newHTML);
+    //console.log(newHTML);
     // Scroll to bottom
     aiLog.style.display = 'block';
     aiLog.scrollTop = aiLog.scrollHeight;
@@ -1165,6 +1162,18 @@ function prepareMdForMathJax(md) {
   return text;
 }
 
+/**
+ * Return a pretty-printed JSON string for the question with the given qid.
+ * Requires the pool to already be loaded into state.all.
+ */
+function getQuestionJson(qid, pool = state.all) {
+  if (!Array.isArray(pool) || pool.length === 0) {
+    throw new Error('Question pool is empty — load it first.');
+  }
+  const rec = pool.find(r => String(r.id) === String(qid));
+  if (!rec) throw new Error(`Question id ${qid} not found.`);
+  return JSON.stringify(rec, null, 2);
+}
     
   </script>
 </body>
