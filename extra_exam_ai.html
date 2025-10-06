@@ -41,36 +41,129 @@
     .sub-section { margin-top: 12px; }
 
 /* --- Per-question AI help UI --- */
-.ai-help-row { display:flex; gap:.5rem; align-items:center; margin-top:.5rem; }
-.ai-follow-input {
-  flex:1; min-width:200px; padding:.5rem .6rem;
-  border:1px solid #ccc; border-radius:.5rem;
+/* --- Per-question AI help UI --- */
+.ai-help-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
 }
-.ai-help-btn {
-  padding:.5rem .75rem; border:1px solid #ccc; border-radius:.5rem;
-  background:#0066cc; color:#fff; cursor:pointer;
-}
-.ai-help-btn:hover { background:#0055aa; }
 
-.ai-box {
-  margin-top:.5rem; border:1px solid #ddd; border-radius:10px;
-  background:#fafafa; padding:8px;
+.ai-follow-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 0.5rem;
 }
+
+.ai-help-btn {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 0.5rem;
+  background: #0066cc;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ai-help-btn:hover { background: #0055aa; }
+
+/* --- AI response box --- */
+.ai-box {
+  margin-top: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fafafa;
+  padding: 0.75rem 1rem;
+}
+
+/* Markdown-style rich text output */
 .ai-log {
-  width:100%;
-  height:180px;            /* initial height */
-  min-height:140px;
-  max-height:65vh;
-  resize:vertical;         /* user can drag to resize */
-  overflow:auto;
-  white-space:pre-wrap;
+  width: 100%;
+  min-height: 140px;
+  max-height: 65vh;
+  overflow: auto;
+  resize: vertical;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: #222;
+  white-space: normal;
+}
+
+/* Headings, bold, italic */
+.ai-log strong { font-weight: 600; }
+.ai-log em { font-style: italic; }
+
+/* Lists */
+.ai-log ul, .ai-log ol {
+  margin: 0.4em 0 0.4em 1.5em;
+  padding: 0;
+}
+.ai-log li { margin-bottom: 0.25em; }
+
+/* Code and preformatted */
+.ai-log code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #f0f0f0;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.ai-log pre {
+  background: #f6f8fa;
+  padding: 0.75em;
+  border-radius: 6px;
+  overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+/* Horizontal rule and blockquote */
+.ai-log hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 0.75em 0;
+}
+.ai-log blockquote {
+  border-left: 4px solid #ccc;
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  color: #555;
+  background: #fdfdfd;
+}
+
+/* Tables */
+.ai-log table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+}
+.ai-log th, .ai-log td {
+  border: 1px solid #ccc;
+  padding: 4px 8px;
+}
+.ai-log th { background: #f0f0f0; text-align: left; }
 
   </style>
 </head>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<!-- MathJax v3 config: must be defined BEFORE the script tag -->
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  },
+  options: {
+      // Only process math inside normal content
+      ignoreHtmlClass: 'tex2jax_ignore',
+      processHtmlClass: 'tex2jax_process'
+    }
+  };
+</script>
+<script async id="MathJax-script"
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+        
+        
 <body>
   <h1>Extra Class Practice Exam</h1>
 
@@ -104,6 +197,15 @@
 
 
   <script>
+// Optional but helpful: preserve backslashes/ids and respect single line breaks
+if (window.marked) {
+  marked.setOptions({
+    mangle: false,
+    headerIds: false,
+    breaks: true
+  });
+}
+
     /* =========================
        OpenAI Retrieval Plumbing
     ========================= */
@@ -120,18 +222,24 @@ When a question id is provided, locate that record and:
 3) Briefly say why the other options are incorrect.
 If no evidence is found, respond with NOT_FOUND.`
 */
-    const system_prompt = 
-`You are a ham radio license exam tutor in the United States. For now, you work 
- on the extra class exam. You have the question pool available via vector store. 
- Your tone should be  calm and encouraging. This is not big deal, it just requires study. 
- People will ask you to help them understand various questions from the exam. Please answer 
- assuming they are not engineers. Give answers that are clear and as simple as possible. 
- Ask lots of follow up questions. NEVER USE THE PHRASE DON'T WORRY.
- Rules:
-- DO NOT restate or quote the question.
-- Start with the correct choice letter and text on one line.
-- If answering a follow on question, do not repeat the correct answer or the exam question.
-- Return Markdown.`
+const system_prompt = `
+You are a ham radio license exam tutor for the U.S. Extra Class exam. 
+Be calm, clear, and encouraging. Assume the student is not an engineer. 
+Ask gentle follow-up questions. NEVER USE THE PHRASE "DON'T WORRY".
+
+When giving equations or math expressions:
+
+FORMAT RULES (CRITICAL)
+-----------------------
+1. Use $...$ for inline math.
+2. Use $$...$$ for display (block) math.
+3. DO NOT use \\(, \\), \\[ or \\].
+4. Output Markdown that renders correctly in MathJax with $ delimiters only.
+-----------------------
+
+Return Markdown only—no HTML or explanations of formatting.
+`;
+
 
     function getAPIKey() {
       let apiKey = localStorage.getItem('openai_api_key');
@@ -478,9 +586,6 @@ If no evidence is found, respond with NOT_FOUND.`
       return chosen;
     }
 
-    const aiPanel = document.getElementById('aiPanel');
-    const aiLog   = document.getElementById('aiLog');
-
     function renderExam() {
       const container = document.getElementById('exam');
       container.innerHTML = "";
@@ -582,6 +687,7 @@ If no evidence is found, respond with NOT_FOUND.`
 const aiRow = document.createElement('div');
 aiRow.className = 'ai-help-row';
 
+
 // follow-up input is created now but hidden until first AI help click
 const followupInput = document.createElement('input');
 followupInput.type = 'text';
@@ -600,13 +706,15 @@ const aiBox = document.createElement('div');
 aiBox.className = 'ai-box';
 aiBox.hidden = true;
 
-const aiLog = document.createElement('textarea');
+const aiLog = document.createElement('div');
 aiLog.className = 'ai-log';
-aiLog.readOnly = true;
+aiLog.hidden = true;              // keep hidden until first click
+aiLog.innerHTML = '';             // will hold rendered HTML
+aiBox.appendChild(aiLog);
 
 // If we already have history for this q.id, preload it (but keep hidden until first click)
 if (AI_THREADS[q.id] && Array.isArray(AI_THREADS[q.id]) && AI_THREADS[q.id].length) {
-  aiLog.value = AI_THREADS[q.id].join('\n') + '\n';
+  aiLog.innerHTML = aiLog.innerHTML = DOMPurify.sanitize(marked.parse(AI_THREADS[q.id].join('\n') + '\n'));
 }
 
 aiBox.appendChild(aiLog);
@@ -614,34 +722,76 @@ aiBox.appendChild(aiLog);
 // Click handler using YOUR askAI()
 helpBtn.addEventListener('click', async () => {
   try {
-    // On first use, reveal UI
     if (aiBox.hidden) aiBox.hidden = false;
     if (followupInput.hidden) followupInput.hidden = false;
 
-    // Build the follow-up as specified
     const extra = followupInput.value.trim();
-    const followup = extra
-      ? `${extra}`
-      : ``;
+    const followup = extra ? extra : "";
 
-    // Call your existing helper (must return { userMsg, answer })
+       // Call your existing helper (must return { userMsg, answer })
     const { userMsg, answer, panelText } = await askAI({ qid: q.id, followup });
 
-    // Append Q/A to this question's textarea (multiline)
-    //const block = `Q: ${userMsg}\nA: ${answer}\n`;
-    //aiLog.value = (aiLog.value || '') + panelText;
-    //aiLog.value = panetext;
-    const block = `${userMsg}\n${answer}\n\n`;
-    aiLog.value = (aiLog.value || '') + block;
+    // --- Convert Markdown to HTML ---
+    // lightweight inline markdown support (basic bold, italic, lists)
+    //const block = normalizeBracketMath(`${userMsg}\n${answer}\n\n`);
+
+    // Build ONLY the new turn’s markdown
+    const rawBlock = `${userMsg}\n\n${answer}\n\n---\n`;
+    //const tmath = normalizeBracketMath(`${userMsg}\n\n${answer}\n\n---\n`);
+
+    // Convert [ ... ] -> \[ ... \] so MathJax can render
+    //const withMath = normalizeBracketMath(rawBlock);
+
+// A) remove accidental 4+ space indents (stop Markdown code blocks)
+//const deindented = deindentForMarkdown(rawBlock);
+
+// B) normalize math delimiters: (...) → \(...\), [...] → \[...\]
+//const withMath = normalizeInlineMath(deindented);
+//console.log(rawBlock);
+//const withMath = prepareMdForMathJax(rawBlock);
+const withMath = rawBlock;
+console.log(withMath);
+// C) Markdown → HTML → sanitize
+//const html = DOMPurify.sanitize(marked.parse(withMath));
+
+    // Markdown -> HTML -> sanitize
+    const newHTML = DOMPurify.sanitize(marked.parse(withMath));
+
+    const turn = document.createElement('div');
+    turn.className = 'tex2jax_process'; // ensure MathJax processes this node
+    turn.innerHTML = newHTML;
+    aiLog.appendChild(turn);
+
+    console.log(newHTML);
+    // Scroll to bottom
+    aiLog.style.display = 'block';
+    aiLog.scrollTop = aiLog.scrollHeight;
+
+    // Ask MathJax to typeset just the new node
+    if (window.MathJax?.typesetPromise) {
+      console.log("processing math");
+      await MathJax.typesetPromise([turn]);
+      console.log("done with math");
+    }
 
 
-    // Keep follow-up box visible but empty
+    // ✅ append as HTML
+    //aiLog.insertAdjacentHTML('beforeend', blockHTML);
+
     followupInput.value = '';
   } catch (err) {
     console.error(err);
     alert(err.message || 'AI help failed.');
   }
 });
+function mdToHtml(md='') {
+  return marked.parse(md);
+}
+function escapeHtml(s='') {
+  return s.replace(/[&<>"']/g, ch => (
+    { '&':'&nbsp;&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]
+  )).replace('&nbsp;&amp;','&amp;'); // keep &amp; correct
+}
 
 // Put input to the LEFT of the button, as requested
 aiRow.appendChild(followupInput);
@@ -746,6 +896,276 @@ card.appendChild(aiBox);
       }
     }
     window.addEventListener('DOMContentLoaded', init);
+
+/**
+ * Prepare an OpenAI Responses API Markdown string for MathJax v3.
+ * - Safely leaves code, links, and images alone.
+ * - Normalizes $...$ and $$...$$ to \( ... \) / \[ ... \].
+ * - Carefully upgrades math-looking (...) and [...] to \( ... \) / \[ ... \].
+ *
+ * @param {string} md
+ * @returns {string} processed Markdown safe for MathJax typesetting
+ */
+function prepareMdForMathJax(md) {
+  if (typeof md !== 'string' || !md) return md || '';
+
+  // A very low-collision placeholder token (ASCII SUB) + kind + index + SUB
+  const SUB = '\x1A';
+  const hoists = []; // {kind, placeholder, text}
+  let text = md;
+
+  // Utilities
+  const isEscaped = (s, i) => {
+    let b = 0, j = i - 1;
+    while (j >= 0 && s[j] === '\\') { b++; j--; }
+    return (b % 2) === 1;
+  };
+
+  const makePH = (kind, idx) => `${SUB}${kind}${idx}${SUB}`;
+
+  const hoistRange = (start, end, kind) => {
+    const idx = hoists.length;
+    const slice = text.slice(start, end);
+    const ph = makePH(kind, idx);
+    hoists.push({ kind, placeholder: ph, text: slice });
+    // replace slice with placeholder
+    text = text.slice(0, start) + ph + text.slice(end);
+    return ph.length - (end - start); // delta shift
+  };
+
+  // Find next occurrence of a run of backticks (inline code)
+  const findNextRun = (s, start, tickCount) => {
+    const run = '`'.repeat(tickCount);
+    let i = start;
+    while (i < s.length) {
+      const j = s.indexOf(run, i);
+      if (j < 0) return -1;
+      if (!isEscaped(s, j)) return j;
+      i = j + 1;
+    }
+    return -1;
+  };
+
+  // Balanced finder for (), [], <>; respects escapes.
+  const findBalanced = (s, startIdx, openCh, closeCh) => {
+    let depth = 0;
+    for (let i = startIdx; i < s.length; i++) {
+      const c = s[i];
+      if (c === openCh && !isEscaped(s, i)) depth++;
+      else if (c === closeCh && !isEscaped(s, i)) {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1; // not found
+  };
+
+  // 1) HOIST code fences (``` or ~~~), inline code (`…`), <code>/<pre>, images, and links.
+  //    We scan repeatedly until no more hoistable regions are found, preserving left-to-right order.
+  (function hoistProtected() {
+    let i = 0;
+    outer: while (i < text.length) {
+      // Fenced code blocks ```...``` or ~~~...~~~
+      if ((text.startsWith('```', i) || text.startsWith('~~~', i)) && !isEscaped(text, i)) {
+        const fence = text.substr(i, 3);
+        const end = text.indexOf(`\n${fence}`, i + 3);
+        const closeIdx = end >= 0 ? end + 1 + 3 : -1; // include trailing fence
+        const endIdx = (closeIdx >= 0) ? (closeIdx + 0) : -1;
+        if (endIdx > 0) {
+          i += hoistRange(i, endIdx + 0, 'FENCE');
+          continue;
+        }
+      }
+
+      // HTML <pre>...</pre> or <code>...</code> (very simple scan)
+      if (text.startsWith('<pre', i) && !isEscaped(text, i)) {
+        const close = text.toLowerCase().indexOf('</pre>', i);
+        if (close >= 0) { i += hoistRange(i, close + 6, 'HTMLPRE'); continue; }
+      }
+      if (text.startsWith('<code', i) && !isEscaped(text, i)) {
+        const close = text.toLowerCase().indexOf('</code>', i);
+        if (close >= 0) { i += hoistRange(i, close + 7, 'HTMLCODE'); continue; }
+      }
+
+      // Inline code spans using backticks (support multi-backtick spans)
+      if (text[i] === '`' && !isEscaped(text, i)) {
+        // count number of consecutive backticks
+        let j = i;
+        while (j < text.length && text[j] === '`') j++;
+        const count = j - i;
+        const close = findNextRun(text, j, count);
+        if (close >= 0) {
+          const end = close + count;
+          i += hoistRange(i, end, 'INCODE');
+          continue;
+        }
+      }
+
+      // Images: ![alt](url(with(paren)))
+      if (text[i] === '!' && text[i + 1] === '[' && !isEscaped(text, i)) {
+        const bStart = i + 1; // at '['
+        const bEnd = findBalanced(text, bStart, '[', ']');
+        if (bEnd >= 0 && text[bEnd + 1] === '(') {
+          const pEnd = findBalanced(text, bEnd + 1, '(', ')');
+          if (pEnd >= 0) { i += hoistRange(i, pEnd + 1, 'IMAGE'); continue; }
+        }
+      }
+
+      // Links: [text](url(with(paren)))
+      if (text[i] === '[' && !isEscaped(text, i)) {
+        const bEnd = findBalanced(text, i, '[', ']');
+        if (bEnd >= 0 && text[bEnd + 1] === '(') {
+          const pEnd = findBalanced(text, bEnd + 1, '(', ')');
+          if (pEnd >= 0) { i += hoistRange(i, pEnd + 1, 'LINK'); continue; }
+        }
+      }
+
+      i++;
+    }
+  })();
+
+  // 2) Convert $$…$$ -> \[ … \] and $…$ -> \( … \), skipping escaped dollars.
+  (function convertDollarMath() {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === '$' && !isEscaped(text, i)) {
+        // Count consecutive $
+        let j = i;
+        while (j < text.length && text[j] === '$') j++;
+        const count = j - i;
+
+        if (count >= 2) {
+          // display math: find closing $$ (exactly two)
+          let k = j;
+          let close = -1;
+          while (k < text.length) {
+            const cand = text.indexOf('$$', k);
+            if (cand < 0) break;
+            if (!isEscaped(text, cand)) { close = cand; break; }
+            k = cand + 1;
+          }
+          if (close >= 0) {
+            const inner = text.slice(j, close);
+            out += '\\[' + inner + '\\]';
+            i = close + 2;
+            continue;
+          }
+        }
+
+        if (count === 1) {
+          // inline math: find next unescaped single $
+          let k = j;
+          let close = -1;
+          while (k < text.length) {
+            const cand = text.indexOf('$', k);
+            if (cand < 0) break;
+            if (!isEscaped(text, cand)) { close = cand; break; }
+            k = cand + 1;
+          }
+          if (close >= 0) {
+            const inner = text.slice(j, close);
+            out += '\\(' + inner + '\\)';
+            i = close + 1;
+            continue;
+          }
+        }
+      }
+
+      out += text[i++];
+    }
+    text = out;
+  })();
+
+  // Helper: decide if content probably contains TeX (to avoid false positives).
+  const looksLikeTeX = (s) => {
+    // Ignore whitespace-only
+    if (!s || !s.trim()) return false;
+    // Heuristics: contains a TeX control sequence or ^/_ usage typical of math
+    if (/[\\](?:[a-zA-Z]+|[{}[\]])/.test(s)) return true;     // \alpha, \frac, \sqrt, \int, \sum, \omega, \left, \right, \{ \}
+    if (/[^^]\^[^{\s]/.test(' ' + s)) return true;            // x^2 or x^y
+    if (/_\{?[\w\\]/.test(s)) return true;                    // x_{i}, x_i, A\_i
+    // Reject obvious URLs/emails
+    if (/(https?:\/\/|www\.|[@]\w)/i.test(s)) return false;
+    // Avoid common non-math bracketed things like [1], (c), (tm), (C++), (v1.2.3)
+    if (/^\s*[\[\(]?\s*(?:\d+|[ct]m|v?\d+(?:\.\d+){1,3}|c\+\+)\s*[\]\)]?\s*$/i.test(s)) return false;
+    return false;
+  };
+
+  // 3) Upgrade parenthesized or square-bracketed TeX-looking runs to \( … \) / \[ … \].
+  //    We must *not* touch: already-converted \(...\)/\[...\], link/image brackets, code, footnotes like [1].
+  (function upgradeParensAndBrackets() {
+    // To avoid index shifting, collect replacements, then rebuild once.
+    const replacements = new Map(); // key: open/close index -> replacement char(s)
+
+    // Scan for \( ... \) / \[ ... \] already present and hoist them (so we don’t reprocess)
+    (function hoistExistingTexDelims() {
+      let i = 0;
+      while (i < text.length) {
+        if (text[i] === '\\' && (text[i + 1] === '(' || text[i + 1] === '[')) {
+          const open = text[i + 1];
+          const close = (open === '(') ? '\\)' : '\\]';
+          const findClose = text.indexOf(close, i + 2);
+          if (findClose >= 0) {
+            i += hoistRange(i, findClose + 2, 'TEXDELIM');
+            continue;
+          }
+        }
+        i++;
+      }
+    })();
+
+    // Now safely search for () and [] in the remaining text (links/images already hoisted).
+    const scanPairs = (openCh, closeCh, openRep, closeRep, isDisplay) => {
+      const stack = [];
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === openCh && !isEscaped(text, i)) {
+          stack.push(i);
+        } else if (c === closeCh && !isEscaped(text, i)) {
+          if (!stack.length) continue;
+          const start = stack.pop();
+          const inner = text.slice(start + 1, i);
+
+          // Skip footnotes like [1], [^1], and empty-ish brackets
+          if (openCh === '[') {
+            if (/^\s*(?:\^?\d+)\s*$/.test(inner)) continue;
+          }
+
+          // Only convert if it *really* looks like TeX
+          if (looksLikeTeX(inner)) {
+            replacements.set(start, openRep);
+            replacements.set(i, closeRep);
+          }
+        }
+      }
+    };
+
+    // Parentheses: \( … \)
+    scanPairs('(', ')', '\\(', '\\)', false);
+    // Brackets: \[ … \]  (but do NOT touch ones that could be links—already hoisted)
+    scanPairs('[', ']', '\\[', '\\]', true);
+
+    if (replacements.size) {
+      let out = '';
+      for (let i = 0; i < text.length; i++) {
+        if (replacements.has(i)) out += replacements.get(i);
+        else out += text[i];
+      }
+      text = out;
+    }
+  })();
+
+  // 4) Unhoist in reverse order to restore original protected content.
+  for (let i = hoists.length - 1; i >= 0; i--) {
+    const { placeholder, text: original } = hoists[i];
+    text = text.split(placeholder).join(original);
+  }
+
+  return text;
+}
+
+    
   </script>
 </body>
 </html>
