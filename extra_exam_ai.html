@@ -344,11 +344,18 @@ RETRIEVAL POLICY
       const sys = `${system_prompt}`;
       const messages = [{ role: 'system', content: sys }];
       for (const m of AI_THREADS[qid].history) messages.push(m);
-
+      let roleStr = "";
+      if(!(followup && followup.trim())){
+        roleStr = 'assistant';
+      }else{
+        roleStr = 'user';
+      }
+      
       const userMsg = (followup && followup.trim()) ?
           followup.trim() :
-          `Please help me with ${getQuestionJson(qid)}`;
-      messages.push({ role: 'user', content: userMsg });
+          `Please help me with ${getQuestionMarkdown(qid)}`;
+      
+      messages.push({ role: roleStr, content: userMsg });
 
       const resp = await openai('/responses', {
         body: {
@@ -1163,16 +1170,51 @@ function prepareMdForMathJax(md) {
 }
 
 /**
- * Return a pretty-printed JSON string for the question with the given qid.
- * Requires the pool to already be loaded into state.all.
+ * Return a Markdown-formatted question for a given qid.
+ * Example output:
+ *
+ * Question:
+ * “What is the maximum power permitted on the 2200-meter band?”
+ *
+ * A. 50 watts PEP (peak envelope power)
+ *
+ * B. 100 watts PEP (peak envelope power)
+ *
+ * C. 1 watt EIRP (equivalent isotropic radiated power) ✅
+ *
+ * D. 5 watts EIRP
+ *
+ * @param {number|string} qid
+ * @param {Array<Object>} [pool=state.all]
+ * @returns {string} Markdown text
  */
-function getQuestionJson(qid, pool = state.all) {
+function getQuestionMarkdown(qid, pool = state.all) {
   if (!Array.isArray(pool) || pool.length === 0) {
     throw new Error('Question pool is empty — load it first.');
   }
-  const rec = pool.find(r => String(r.id) === String(qid));
-  if (!rec) throw new Error(`Question id ${qid} not found.`);
-  return JSON.stringify(rec, null, 2);
+
+  const q = pool.find(r => String(r.id) === String(qid));
+  if (!q) throw new Error(`Question id ${qid} not found.`);
+
+  const sanitize = (t) => (t ?? "").toString().trim();
+  const letterToField = (L) => ({ A: "answer_a", B: "answer_b", C: "answer_c", D: "answer_d" }[L]);
+
+  const questionText = sanitize(q.question);
+  const correctLetter = sanitize(q.answer).toUpperCase();
+
+  // Build formatted Markdown
+  let md = `**Question:**\n“${questionText}”\n\n`;
+
+  ['A', 'B', 'C', 'D'].forEach(letter => {
+    const field = letterToField(letter);
+    const text = sanitize(q[field]);
+    if (text) {
+      const mark = (letter === correctLetter) ? ' ✅' : '';
+      md += `${letter}. ${text}${mark}\n\n`;
+    }
+  });
+
+  return md.trim();
 }
     
   </script>
