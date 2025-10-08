@@ -141,7 +141,7 @@
   padding: 4px 8px;
 }
 .ai-log th { background: #f0f0f0; text-align: left; }
-    openai-chatkit {
+    .openai-chatkit {
       display: block;
       height: 100vh;
       width: 100%;
@@ -353,20 +353,20 @@ Return Markdown only—no HTML or explanations of formatting.
 
     // Per-question conversation state (persisted)
     function loadThreads() {
-      try { return JSON.parse(localStorage.getItem('ai_threads2') || '{}'); }
+      try { return JSON.parse(localStorage.getItem('ai_threads4') || '{}'); }
       catch { return {}; }
     }
     function saveThreads(obj) {
-      localStorage.setItem('ai_threads2', JSON.stringify(obj));
+      localStorage.setItem('ai_threads4', JSON.stringify(obj));
     }
-    let AI_THREADS = loadThreads(); // { [qid]: { history:[{role,content}], panel:"" } }
+    let AI_THREADS = loadThreads(); // { [qid]: { history:[{role,content}], panel:"", ckthread:obj } }
 
     // Send turn via Responses + File Search, using per-question thread
     async function askAI({ qid, followup }) {
       const vsId = localStorage.getItem('vector_store_id');
       //if (!vsId) throw new Error('No vector_store_id found.');
 
-      if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "" };
+      if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "",  ckthread: null };
 
       // Compose system + history + user
       const sys = `${system_prompt}`;
@@ -394,20 +394,8 @@ Return Markdown only—no HTML or explanations of formatting.
           truncation: "auto"
         }
       });
-
-      //let's see if we can also get a chatkit key
-      
-      const respck = await openaick('/chatkit/sessions', {
-        body: {
-          workflow: { id: "wf_68e55e0c05a0819099112be4a1f8f3f307c0b7f1fed4ccb0" },
-          user: "testdevice",
-        }
-      });
-
       const answer = extractText(resp) || "(no answer text)";
-      const client_key = extractTextck(respck);
-      console.log("printing client_key");
-      console.log(client_key);
+
 
       // update thread + panel
       AI_THREADS[qid].history.push({ role:'user', content:userMsg });
@@ -418,23 +406,101 @@ Return Markdown only—no HTML or explanations of formatting.
       saveThreads(AI_THREADS);
 
 
-  //now try to use chatkit
-
-      const el = document.getElementById("chat");
-      el.setOptions({
-        api: { getClientSecret: async () => client_key },
-        theme: "light",
-        header: { enabled: true, title: { text: "Local ChatKit Demo" } },
-        composer: { placeholder: "Message the AI" },
-        initialThread: null,
-      });
-
-      el.addEventListener("chatkit.error", e =>
-        console.error("ChatKit error:", e.detail?.error));
 
         //wwe resume our normal showw
 
       return { userMsg, answer, panelText: AI_THREADS[qid].panel };
+    }
+
+    let client_key = "";
+
+    async function getChatKey(){
+        const respck = await openaick('/chatkit/sessions', {
+          body: {
+            workflow: { id: "wf_68e55e0c05a0819099112be4a1f8f3f307c0b7f1fed4ccb0" },
+            user: "testdevice",
+          }
+        });
+        
+        const client_key = extractTextck(respck);
+
+        console.log("printing client_key");
+        console.log(client_key);
+        return client_key
+    }
+
+    async function askCKAI(qid, el){
+      //let's see if we can also get a chatkit key
+   //now try to use chatkit
+  //modifyf this to also start the per question version
+  //Set it up if you haven't already
+      let threadId = null;
+
+  if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "",  ckthread: null };
+
+  if(AI_THREADS[qid].ckthread == null){
+
+      el.addEventListener("chatkit.thread.change", (e) => {
+        threadId = e.detail.threadId;
+        console.log("Thread created:", threadId);
+        AI_THREADS[qid].ckthread = threadId;
+      });    
+      
+
+      //const el = document.getElementById("chat");
+      await el.setOptions({
+        api: { getClientSecret: getChatKey },
+        theme: "light",
+        header: { enabled: true, title: { text: "Ham Radio Exam Help" } },
+        composer: { placeholder: "Any followups?" },
+        initialThread: null,
+      });
+
+      await Promise.resolve();
+      
+      
+  }
+
+
+
+  el.addEventListener("chatkit.response.end", () => {
+    if (window.MathJax?.typesetPromise) {
+      MathJax.typesetPromise();
+    }
+  });
+
+  console.log("sending initial message");
+      // Send the initial message immediately
+    await el.sendUserMessage({
+      text: `Please help me with ${getQuestionMarkdown(qid)}`
+    });
+
+
+el.addEventListener("chatkit.error", async (e) => {
+    const err = e.detail?.error;
+    const status = err?.status || err?.cause?.status || err?.response?.status;
+    if (status === 401) {
+      // Invalidate & refresh
+      client_key = "";
+        const respck = await openaick('/chatkit/sessions', {
+          body: {
+            workflow: { id: "wf_68e55e0c05a0819099112be4a1f8f3f307c0b7f1fed4ccb0" },
+            user: "testdevice",
+          }
+        });
+
+        client_key = extractTextck(respck);
+
+      try {
+        //await fetchNewClientSecret();
+        // Nudge UI to pull fresh data (optional)
+        await el.fetchUpdates();
+      } catch (refreshErr) {
+        console.error("Failed to refresh client_secret after 401:", refreshErr);
+      }
+    }
+  });     
+
     }
 
     /* =========================
@@ -766,11 +832,11 @@ aiRow.className = 'ai-help-row';
 
 
 // follow-up input is created now but hidden until first AI help click
-const followupInput = document.createElement('input');
-followupInput.type = 'text';
-followupInput.placeholder = 'Ask a follow-up (optional)…';
-followupInput.className = 'ai-follow-input';
-followupInput.hidden = true;  // <- per your requirement
+//const followupInput = document.createElement('input');
+//followupInput.type = 'text';
+//followupInput.placeholder = 'Ask a follow-up (optional)…';
+//followupInput.className = 'ai-follow-input';
+//followupInput.hidden = true;  // <- per your requirement
 
 // AI help button (always visible)
 const helpBtn = document.createElement('button');
@@ -783,11 +849,16 @@ const aiBox = document.createElement('div');
 aiBox.className = 'ai-box';
 aiBox.hidden = true;
 
+const aiCk = document.createElement('openai-chatkit');
+aiCk.className = 'openai-chatkit';
+aiCk.hidden = true;
+
 const aiLog = document.createElement('div');
 aiLog.className = 'ai-log';
 aiLog.hidden = true;              // keep hidden until first click
 aiLog.innerHTML = '';             // will hold rendered HTML
 aiBox.appendChild(aiLog);
+aiBox.appendChild(aiCk);
 
 // If we already have history for this q.id, preload it (but keep hidden until first click)
 if (AI_THREADS[q.id] && Array.isArray(AI_THREADS[q.id]) && AI_THREADS[q.id].length) {
@@ -800,46 +871,49 @@ aiBox.appendChild(aiLog);
 helpBtn.addEventListener('click', async () => {
   try {
     if (aiBox.hidden) aiBox.hidden = false;
-    if (followupInput.hidden) followupInput.hidden = false;
+    //if (followupInput.hidden) followupInput.hidden = false;
 
-    const extra = followupInput.value.trim();
-    const followup = extra ? extra : "";
+    //const extra = followupInput.value.trim();
+    //const followup = extra ? extra : "";
 
        // Call your existing helper (must return { userMsg, answer })
-    const { userMsg, answer, panelText } = await askAI({ qid: q.id, followup });
+    //const { userMsg, answer, panelText } = await askAI({ qid: q.id, followup });
+
+    //Also call the chatkit ai 
+    await askCKAI(q.id, aiCk);
 
     // --- Convert Markdown to HTML ---
     // lightweight inline markdown support (basic bold, italic, lists)
     //const block = normalizeBracketMath(`${userMsg}\n${answer}\n\n`);
 
     // Build ONLY the new turn’s markdown
-    const rawBlock = `${userMsg}\n\n${answer}\n\n---\n`;
+    //const rawBlock = `${userMsg}\n\n${answer}\n\n---\n`;
     //const withMath = rawBlock;
     // C) Markdown → HTML → sanitize
-    const newHTML = DOMPurify.sanitize(marked.parse(rawBlock));
+    //const newHTML = DOMPurify.sanitize(marked.parse(rawBlock));
 
-    const turn = document.createElement('div');
-    turn.className = 'tex2jax_process'; // ensure MathJax processes this node
-    turn.innerHTML = newHTML;
-    aiLog.appendChild(turn);
+    //const turn = document.createElement('div');
+    //turn.className = 'tex2jax_process'; // ensure MathJax processes this node
+    //turn.innerHTML = newHTML;
+    //aiLog.appendChild(turn);
 
     //console.log(newHTML);
     // Scroll to bottom
-    aiLog.style.display = 'block';
-    aiLog.scrollTop = aiLog.scrollHeight;
+    //aiLog.style.display = 'block';
+   // aiLog.scrollTop = aiLog.scrollHeight;
 
     // Ask MathJax to typeset just the new node
-    if (window.MathJax?.typesetPromise) {
-      console.log("processing math");
-      await MathJax.typesetPromise([turn]);
-      console.log("done with math");
-    }
+    //if (window.MathJax?.typesetPromise) {
+    //  console.log("processing math");
+    //  await MathJax.typesetPromise([aiCk]);
+    //  console.log("done with math");
+   // }
 
 
     // ✅ append as HTML
     //aiLog.insertAdjacentHTML('beforeend', blockHTML);
 
-    followupInput.value = '';
+    //followupInput.value = '';
   } catch (err) {
     console.error(err);
     alert(err.message || 'AI help failed.');
@@ -857,7 +931,7 @@ function escapeHtml(s='') {
 }
 
 // Put input to the LEFT of the button, as requested
-aiRow.appendChild(followupInput);
+//aiRow.appendChild(followupInput);
 aiRow.appendChild(helpBtn);
 
 // Insert into the card
