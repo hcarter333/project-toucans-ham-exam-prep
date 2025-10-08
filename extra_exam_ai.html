@@ -141,11 +141,18 @@
   padding: 4px 8px;
 }
 .ai-log th { background: #f0f0f0; text-align: left; }
+    openai-chatkit {
+      display: block;
+      height: 100vh;
+      width: 100%;
+    }
 
   </style>
 </head>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" async></script>
+
 <!-- MathJax v3 config: must be defined BEFORE the script tag -->
 <script>
 window.MathJax = {
@@ -166,6 +173,7 @@ window.MathJax = {
         
 <body>
   <h1>Extra Class Practice Exam</h1>
+  <openai-chatkit id="chat"></openai-chatkit>
 
   <div class="toolbar">
     <button id="newExamBtn" class="btn" disabled>New exam</button>
@@ -194,7 +202,6 @@ window.MathJax = {
       <pre id="tracking" style="white-space:pre-wrap;"></pre>
     </details>
   </div>
-
 
   <script>
 // Optional but helpful: preserve backslashes/ids and respect single line breaks
@@ -229,6 +236,9 @@ Ask gentle follow-up questions. When an exam question involves math
 or numbers, always work out the math in a step by step fashion, explaining 
 why each step wwas taken. NEVER USE THE PHRASE "DON'T WORRY".
 
+NEVER contradict the correct answewr as 
+demarked with the  ✅ symbol.
+
 When giving equations or math expressions:
 
 FORMAT RULES (CRITICAL)
@@ -241,14 +251,6 @@ FORMAT RULES (CRITICAL)
 
 Return Markdown only—no HTML or explanations of formatting.
 
-RETRIEVAL POLICY
-- If the user gives an explicit ID like “id 598”, search by metadata {id:598}
-- Prefer exact-key matches over fuzzy text.
-- Limit retrieval to ≤ 5 chunks, ≤ 1,500 total tokens.
-- If no key is present, build a compact keyword query (≤ 12 words) using:
-  [ class, subelement, group_index+group_number, core nouns/verbs, dates ]
-- Examples of good queries:
-  • "id:598
 `;
 
 
@@ -271,6 +273,24 @@ RETRIEVAL POLICY
         headers: isForm
           ? { 'Authorization': `Bearer ${apiKey}`, ...headers }
           : { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...headers },
+        body: isForm ? body : (body ? JSON.stringify(body) : undefined),
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(`OpenAI ${path} failed: ${res.status} ${res.statusText} :: ${text}`);
+      return text ? JSON.parse(text) : {};
+    }
+
+    async function openaick(path, { method = 'POST', headers = {}, body } = {}) {
+      const apiKey = getAPIKey();
+      if (!apiKey) throw new Error('Missing OpenAI API key.');
+
+      const isForm = (body instanceof FormData);
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        headers: isForm
+          ? { 'Authorization': `Bearer ${apiKey}`, ...headers }
+          : { "OpenAI-Beta": "chatkit_beta=v1", 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...headers },
         body: isForm ? body : (body ? JSON.stringify(body) : undefined),
       });
 
@@ -323,6 +343,14 @@ RETRIEVAL POLICY
       return null;
     }
 
+    function extractTextck(resp) {
+      if (resp && resp.status == "active") {
+        const hit = resp.client_secret;
+        return hit;
+      }
+      return null;
+    }
+
     // Per-question conversation state (persisted)
     function loadThreads() {
       try { return JSON.parse(localStorage.getItem('ai_threads2') || '{}'); }
@@ -336,7 +364,7 @@ RETRIEVAL POLICY
     // Send turn via Responses + File Search, using per-question thread
     async function askAI({ qid, followup }) {
       const vsId = localStorage.getItem('vector_store_id');
-      if (!vsId) throw new Error('No vector_store_id found.');
+      //if (!vsId) throw new Error('No vector_store_id found.');
 
       if (!AI_THREADS[qid]) AI_THREADS[qid] = { history: [], panel: "" };
 
@@ -367,7 +395,19 @@ RETRIEVAL POLICY
         }
       });
 
+      //let's see if we can also get a chatkit key
+      
+      const respck = await openaick('/chatkit/sessions', {
+        body: {
+          workflow: { id: "wf_68e55e0c05a0819099112be4a1f8f3f307c0b7f1fed4ccb0" },
+          user: "testdevice",
+        }
+      });
+
       const answer = extractText(resp) || "(no answer text)";
+      const client_key = extractTextck(respck);
+      console.log("printing client_key");
+      console.log(client_key);
 
       // update thread + panel
       AI_THREADS[qid].history.push({ role:'user', content:userMsg });
@@ -376,6 +416,23 @@ RETRIEVAL POLICY
       const block = `Q#${qid} — ${userMsg}\n${answer}\n`;
       AI_THREADS[qid].panel = (AI_THREADS[qid].panel ? AI_THREADS[qid].panel + "\n" : "") + block;
       saveThreads(AI_THREADS);
+
+
+  //now try to use chatkit
+
+      const el = document.getElementById("chat");
+      el.setOptions({
+        api: { getClientSecret: async () => client_key },
+        theme: "light",
+        header: { enabled: true, title: { text: "Local ChatKit Demo" } },
+        composer: { placeholder: "Message the AI" },
+        initialThread: null,
+      });
+
+      el.addEventListener("chatkit.error", e =>
+        console.error("ChatKit error:", e.detail?.error));
+
+        //wwe resume our normal showw
 
       return { userMsg, answer, panelText: AI_THREADS[qid].panel };
     }
@@ -787,6 +844,8 @@ helpBtn.addEventListener('click', async () => {
     console.error(err);
     alert(err.message || 'AI help failed.');
   }
+
+
 });
 function mdToHtml(md='') {
   return marked.parse(md);
@@ -891,7 +950,7 @@ card.appendChild(aiBox);
         const pool = await loadPool();
         state.all = pool;
         // Ensure the vector store exists & is indexed (user-owned)
-        await ensureVectorStore(pool);
+        //await ensureVectorStore(pool);
         startNewExam(state.all);
         document.getElementById('newExamBtn').disabled = false;
       } catch (e) {
