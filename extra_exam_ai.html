@@ -158,13 +158,16 @@
 window.MathJax = {
   tex: {
     inlineMath: [['$', '$'], ['\\(', '\\)']],
-    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true
   },
   options: {
       // Only process math inside normal content
-      ignoreHtmlClass: 'tex2jax_ignore',
-      processHtmlClass: 'tex2jax_process'
-    }
+    },
+  startup: {
+    typeset: true
+  }
+
   };
 </script>
 <script async id="MathJax-script"
